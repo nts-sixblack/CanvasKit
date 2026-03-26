@@ -1,0 +1,15 @@
+{
+  "name": "CanvasKit",
+  "version": "1.0.0",
+  "defaultLocalization": "en",
+  "swiftToolsVersion": "6.0",
+  "platforms": {
+    "iOS": "16.0",
+    "macOS": "14.0"
+  },
+  "products": [
+    "CanvasKitCore",
+    "CanvasKitUIKit",
+    "CanvasKitSwiftUI"
+  ]
+}
