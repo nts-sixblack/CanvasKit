@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `1.0.0`
+Current release: `1.0.1`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 
@@ -66,6 +66,68 @@ struct EditorHostView: View {
 `CanvasEditorView` already ignores the keyboard safe area, so presenting it in a
 regular SwiftUI `.sheet` keeps the canvas layout stable while inline text editing
 is active.
+
+Push the editor inside a `NavigationStack` by switching the hosting style:
+
+```swift
+import CanvasKitCore
+import CanvasKitSwiftUI
+import SwiftUI
+
+struct NavigationEditorHostView: View {
+    @State private var path: [Route] = []
+    private let configuration = CanvasEditorConfiguration.default
+    private let template = CanvasTemplateLoader
+        .loadTemplates(configuration: .default)
+        .first!
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            Button("Edit Template") {
+                path.append(.editor)
+            }
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .editor:
+                    NavigationEditorScreen(
+                        template: template,
+                        configuration: configuration
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct NavigationEditorScreen: View {
+    let template: CanvasTemplate
+    let configuration: CanvasEditorConfiguration
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        CanvasEditorView(
+            input: .template(template),
+            configuration: configuration,
+            hostingStyle: .navigationStack,
+            onCancel: {
+                dismiss()
+            },
+            onExport: { result, previewImage in
+                print(result.projectData.count, previewImage.size)
+                dismiss()
+            }
+        )
+    }
+}
+
+private enum Route: Hashable {
+    case editor
+}
+```
+
+`hostingStyle: .navigationStack` hides the outer SwiftUI navigation bar so the
+editor keeps using its own navigation chrome for close and export actions.
 
 ### UIKit
 
@@ -150,7 +212,7 @@ Load them with `CanvasTemplateLoader`.
 
 ## Example
 
-Example client code lives in [`Example/CanvasKitExample/README.md`](Example/CanvasKitExample/README.md).
+Example client code lives in [`Example/CanvasKit/CanvasKit/ContentView.swift`](Example/CanvasKit/CanvasKit/ContentView.swift).
 
 ## Docs
 

@@ -4,25 +4,45 @@ import UIKit
 import CanvasKitCore
 import CanvasKitUIKit
 
+public enum CanvasEditorHostingStyle: Sendable {
+    case sheet
+    case navigationStack
+}
+
 public struct CanvasEditorView: View {
     public let input: CanvasEditorInput
     public let configuration: CanvasEditorConfiguration
+    public let hostingStyle: CanvasEditorHostingStyle
     public let onCancel: () -> Void
     public let onExport: (CanvasEditorResult, UIImage) -> Void
 
     public init(
         input: CanvasEditorInput,
         configuration: CanvasEditorConfiguration = .default,
+        hostingStyle: CanvasEditorHostingStyle = .sheet,
         onCancel: @escaping () -> Void,
         onExport: @escaping (CanvasEditorResult, UIImage) -> Void
     ) {
         self.input = input
         self.configuration = configuration
+        self.hostingStyle = hostingStyle
         self.onCancel = onCancel
         self.onExport = onExport
     }
 
+    @ViewBuilder
     public var body: some View {
+        switch hostingStyle {
+        case .sheet:
+            editorContent
+        case .navigationStack:
+            editorContent
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
+        }
+    }
+
+    private var editorContent: some View {
         CanvasEditorContainerView(
             input: input,
             configuration: configuration,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- added `CanvasEditorHostingStyle.navigationStack` so SwiftUI hosts can push the editor through `NavigationStack` without showing duplicate navigation bars
+- fixed rotated text height resizing so dragging the height handle follows the text node's local height axis correctly
+
 ## 1.0.0
 
 - first stable release of `CanvasKit` with `CanvasKitCore`, `CanvasKitUIKit`, and `CanvasKitSwiftUI`

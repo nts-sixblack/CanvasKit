@@ -614,10 +614,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         switch gestureRecognizer.state {
         case .changed:
-            let cosValue = CGFloat(cos(-selectedNode.transform.rotation))
-            let sinValue = CGFloat(sin(-selectedNode.transform.rotation))
-            let localDeltaX = (delta.x * cosValue) - (delta.y * sinValue)
-            let widthDelta = localDeltaX / max(selectedNode.transform.scale, 0.001)
+            let projectedDelta = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+                delta,
+                rotation: selectedNode.transform.rotation
+            )
+            let widthDelta = projectedDelta.localDeltaX / max(selectedNode.transform.scale, 0.001)
             store.adjustSelectedTextWidth(by: widthDelta)
             ensureSelectedTextFitsHeight()
             lastTextWidthTranslation = translation
@@ -647,10 +648,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         switch gestureRecognizer.state {
         case .changed:
-            let sinValue = CGFloat(sin(selectedNode.transform.rotation))
-            let cosValue = CGFloat(cos(selectedNode.transform.rotation))
-            let localDeltaY = (delta.x * sinValue) + (delta.y * cosValue)
-            let heightDelta = localDeltaY / max(selectedNode.transform.scale, 0.001)
+            let projectedDelta = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+                delta,
+                rotation: selectedNode.transform.rotation
+            )
+            let heightDelta = projectedDelta.localDeltaY / max(selectedNode.transform.scale, 0.001)
             let style = selectedNode.style ?? .defaultText
             let minimumHeight = style.requiredTextHeight(
                 text: selectedNode.text ?? "",

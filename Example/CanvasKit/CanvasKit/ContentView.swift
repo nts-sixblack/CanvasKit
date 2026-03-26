@@ -8,21 +8,20 @@
 import CanvasKitCore
 import CanvasKitSwiftUI
 import SwiftUI
-import Combine
 
 struct ContentView: View {
     @StateObject private var store = CanvasKitExampleStore(
         configuration: CanvasKitExampleConfiguration.makeEditorConfiguration()
     )
-    @State private var activeSession: ActiveEditorSession?
+    @State private var navigationPath: [ActiveEditorSession] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             List {
                 Section("Templates") {
                     ForEach(store.templates) { template in
                         Button(template.name) {
-                            activeSession = ActiveEditorSession(input: .template(template))
+                            navigationPath.append(ActiveEditorSession(input: .template(template)))
                         }
                     }
                 }
@@ -38,37 +37,54 @@ struct ContentView: View {
                             guard let project = savedDocument.project else {
                                 return
                             }
-                            activeSession = ActiveEditorSession(input: .project(project))
+                            navigationPath.append(ActiveEditorSession(input: .project(project)))
                         }
                         .disabled(savedDocument.project == nil)
                     }
                 }
             }
             .navigationTitle("CanvasKit Example")
-        }
-        .sheet(item: $activeSession) { session in
-            editorSheet(input: session.input)
+            .navigationDestination(for: ActiveEditorSession.self) { session in
+                CanvasEditorExampleScreen(
+                    input: session.input,
+                    store: store
+                )
+            }
         }
     }
+}
 
-    private func editorSheet(input: CanvasEditorInput) -> some View {
-        // CanvasEditorView already ignores keyboard safe area, so the editor
-        // keeps its layout stable while inline text editing is active.
+private struct CanvasEditorExampleScreen: View {
+    let input: CanvasEditorInput
+    let store: CanvasKitExampleStore
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
         CanvasEditorView(
             input: input,
             configuration: store.configuration,
+            hostingStyle: .navigationStack,
             onCancel: {
-                activeSession = nil
+                dismiss()
             },
             onExport: { result, previewImage in
                 store.save(result: result, previewImage: previewImage)
-                activeSession = nil
+                dismiss()
             }
         )
     }
 }
 
-private struct ActiveEditorSession: Identifiable {
+private struct ActiveEditorSession: Hashable, Identifiable {
     let id = UUID()
     let input: CanvasEditorInput
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }

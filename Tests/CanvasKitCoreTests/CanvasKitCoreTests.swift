@@ -181,6 +181,55 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertGreaterThan(after?.transform.position.x ?? 0, before?.transform.position.x ?? 0)
     }
 
+    func testProjectScreenDeltaToLocalAxesAtZeroRotationPreservesAxes() {
+        let projected = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+            CGPoint(x: 30, y: -12),
+            rotation: 0
+        )
+
+        XCTAssertEqual(projected.localDeltaX, 30, accuracy: 0.001)
+        XCTAssertEqual(projected.localDeltaY, -12, accuracy: 0.001)
+    }
+
+    func testProjectScreenDeltaToLocalAxesAtQuarterTurnMatchesRotatedWidthAndHeightAxes() {
+        let horizontalDrag = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+            CGPoint(x: 40, y: 0),
+            rotation: .pi / 2
+        )
+        let verticalDrag = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+            CGPoint(x: 0, y: 25),
+            rotation: .pi / 2
+        )
+
+        XCTAssertEqual(horizontalDrag.localDeltaX, 0, accuracy: 0.001)
+        XCTAssertEqual(horizontalDrag.localDeltaY, -40, accuracy: 0.001)
+        XCTAssertEqual(verticalDrag.localDeltaX, 25, accuracy: 0.001)
+        XCTAssertEqual(verticalDrag.localDeltaY, 0, accuracy: 0.001)
+    }
+
+    func testProjectScreenDeltaToLocalAxesMatchesWidthAndHeightBasisAtArbitraryRotation() {
+        let rotation = 0.35
+        let cosValue = cos(rotation)
+        let sinValue = sin(rotation)
+
+        let widthBasisDrag = CGPoint(x: 24 * cosValue, y: 24 * sinValue)
+        let heightBasisDrag = CGPoint(x: -52 * sinValue, y: 52 * cosValue)
+
+        let projectedWidth = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+            widthBasisDrag,
+            rotation: rotation
+        )
+        let projectedHeight = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+            heightBasisDrag,
+            rotation: rotation
+        )
+
+        XCTAssertEqual(projectedWidth.localDeltaX, 24, accuracy: 0.001)
+        XCTAssertEqual(projectedWidth.localDeltaY, 0, accuracy: 0.001)
+        XCTAssertEqual(projectedHeight.localDeltaX, 0, accuracy: 0.001)
+        XCTAssertEqual(projectedHeight.localDeltaY, 52, accuracy: 0.001)
+    }
+
     func testAddImageNodePreservesIntrinsicAspectRatio() {
         let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
 
