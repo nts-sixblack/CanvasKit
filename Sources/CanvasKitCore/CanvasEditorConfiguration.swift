@@ -353,6 +353,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var brushColorSectionTitle: String
     public var brushSizeRowTitle: String
     public var brushOpacityRowTitle: String
+    public var eraserInspectorTitle: String
+    public var eraserSizeRowTitle: String
     public var layerPanelTitle: String
     public var layerTextFallbackTitle: String
     public var layerEmojiFallbackTitle: String
@@ -418,6 +420,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         brushColorSectionTitle: String = "Color",
         brushSizeRowTitle: String = "Size",
         brushOpacityRowTitle: String = "Opacity",
+        eraserInspectorTitle: String = "Eraser",
+        eraserSizeRowTitle: String = "Size",
         layerPanelTitle: String = "Layers",
         layerTextFallbackTitle: String = "Text",
         layerEmojiFallbackTitle: String = "Emoji",
@@ -482,6 +486,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.brushColorSectionTitle = brushColorSectionTitle
         self.brushSizeRowTitle = brushSizeRowTitle
         self.brushOpacityRowTitle = brushOpacityRowTitle
+        self.eraserInspectorTitle = eraserInspectorTitle
+        self.eraserSizeRowTitle = eraserSizeRowTitle
         self.layerPanelTitle = layerPanelTitle
         self.layerTextFallbackTitle = layerTextFallbackTitle
         self.layerEmojiFallbackTitle = layerEmojiFallbackTitle

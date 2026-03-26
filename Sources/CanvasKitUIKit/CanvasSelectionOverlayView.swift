@@ -51,23 +51,28 @@ final class CanvasSelectionOverlayView: UIView {
 
 final class OverlayHandleControl: UIControl {
     private let imageView = UIImageView()
+    private var metrics: CanvasOverlayHandleMetrics
 
     init(systemImage: String, tintColor: UIColor = .black) {
         let layout = CanvasEditorUIRuntime.currentConfiguration.layout
-        let size = CGFloat(layout.overlayHandleSize)
-        super.init(frame: CGRect(x: 0, y: 0, width: size, height: size))
+        metrics = CanvasOverlayHandleMetrics(
+            handleSize: CGFloat(layout.overlayHandleSize),
+            cornerRadius: CGFloat(layout.overlayHandleCornerRadius),
+            symbolPointSize: CGFloat(layout.overlayHandleSize) * 0.55
+        )
+        super.init(frame: CGRect(origin: .zero, size: CGSize(width: metrics.handleSize, height: metrics.handleSize)))
         backgroundColor = CanvasEditorTheme.overlayHandleBackground
-        layer.cornerRadius = CGFloat(layout.overlayHandleCornerRadius)
         layer.shadowColor = CanvasEditorTheme.overlayHandleShadow.cgColor
         layer.shadowOpacity = 0.25
         layer.shadowRadius = 8
         layer.shadowOffset = CGSize(width: 0, height: 4)
 
         imageView.image = UIImage(systemName: systemImage)
-        imageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 33, weight: .bold)
         imageView.tintColor = tintColor
         imageView.contentMode = .center
         addSubview(imageView)
+
+        apply(metrics: metrics)
     }
 
     @available(*, unavailable)
@@ -75,9 +80,32 @@ final class OverlayHandleControl: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: metrics.handleSize, height: metrics.handleSize)
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         imageView.frame = bounds
+    }
+
+    func updateMetrics(_ metrics: CanvasOverlayHandleMetrics) {
+        guard self.metrics != metrics else {
+            return
+        }
+        apply(metrics: metrics)
+    }
+
+    private func apply(metrics: CanvasOverlayHandleMetrics) {
+        self.metrics = metrics
+        bounds.size = CGSize(width: metrics.handleSize, height: metrics.handleSize)
+        layer.cornerRadius = metrics.cornerRadius
+        imageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
+            pointSize: metrics.symbolPointSize,
+            weight: .bold
+        )
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 }
 #endif

@@ -42,6 +42,21 @@ private enum CanvasStageToolMode: Equatable {
     case erasing(strokeWidth: Double)
 }
 
+private final class CanvasOverlayPassthroughView: UIView {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        subviews.contains { subview in
+            guard !subview.isHidden,
+                  subview.alpha > 0.01,
+                  subview.isUserInteractionEnabled else {
+                return false
+            }
+
+            let subviewPoint = subview.convert(point, from: self)
+            return subview.point(inside: subviewPoint, with: event)
+        }
+    }
+}
+
 @MainActor
 protocol CanvasStageViewDelegate: AnyObject {
     func canvasStageViewDidTapSelectedTextNode(_ stageView: CanvasStageView)
@@ -68,6 +83,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private let contentContainerView = UIView()
     private let backgroundColorView = UIView()
     private let backgroundImageView = UIImageView()
+    private let overlayControlContainerView = CanvasOverlayPassthroughView()
     private let lowerNodeContainerView = UIView()
     private let selectedNodeHostView = UIView()
     private let upperNodeContainerView = UIView()
@@ -104,9 +120,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private var projectObserverID: UUID?
     private var selectionObserverID: UUID?
     private var nodeViews: [String: CanvasNodeView] = [:]
+    private var pendingProject: CanvasProject?
 
     private var canvasSize: CGSize = .zero
     private var canvasScale: CGFloat = 1
+    private var hasCompletedInitialViewportLayout = false
     private var activePanTranslation: CGPoint = .zero
     private var activePanNodeID: String?
     private var activePinchNodeID: String?
@@ -127,6 +145,9 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private var textContentInset: CGFloat {
         CGFloat(CanvasEditorUIRuntime.currentConfiguration.layout.textContentInset)
     }
+    private var hasRenderableBounds: Bool {
+        bounds.width > 0 && bounds.height > 0
+    }
 
     var isToolModeActive: Bool {
         toolMode != nil
@@ -144,6 +165,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.clipsToBounds = true
         contentContainerView.layer.cornerRadius = CGFloat(CanvasEditorUIRuntime.currentConfiguration.layout.surfaceCornerRadius)
         contentContainerView.layer.cornerCurve = .continuous
+        overlayControlContainerView.backgroundColor = .clear
 
         backgroundImageView.contentMode = .scaleAspectFill
         backgroundImageView.clipsToBounds = true
@@ -179,6 +201,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.layer.mask = eraserMaskLayer
 
         addSubview(canvasContainerView)
+        addSubview(overlayControlContainerView)
         canvasContainerView.addSubview(contentContainerView)
         contentContainerView.addSubview(backgroundColorView)
         contentContainerView.addSubview(backgroundImageView)
@@ -191,7 +214,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
             $0.isHidden = true
-            canvasContainerView.addSubview($0)
+            overlayControlContainerView.addSubview($0)
         }
 
         deleteHandle.addAction(UIAction { [weak self] _ in
@@ -234,62 +257,46 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
     override func layoutSubviews() {
         super.layoutSubviews()
+
+        guard hasRenderableBounds else {
+            return
+        }
+
+        if let pendingProject {
+            let shouldDisableAnimations = !hasCompletedInitialViewportLayout
+            performStageUpdates(disablingAnimations: shouldDisableAnimations) {
+                applyProject(pendingProject)
+                self.pendingProject = nil
+                applyViewportLayout()
+            }
+
+            if canvasSize.width > 0, canvasSize.height > 0 {
+                hasCompletedInitialViewportLayout = true
+            }
+            return
+        }
+
         guard canvasSize.width > 0, canvasSize.height > 0 else {
             return
         }
 
-        let layout = CanvasViewportMath.fit(canvasSize: canvasSize, in: bounds, padding: viewportPadding)
-        canvasScale = layout.scale
-
-        canvasContainerView.bounds = CGRect(origin: .zero, size: canvasSize)
-        canvasContainerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        canvasContainerView.transform = CGAffineTransform(scaleX: canvasScale, y: canvasScale)
-        canvasContainerView.layer.shadowPath = UIBezierPath(
-            roundedRect: CGRect(origin: .zero, size: canvasSize),
-            cornerRadius: contentContainerView.layer.cornerRadius
-        ).cgPath
-
-        contentContainerView.frame = CGRect(origin: .zero, size: canvasSize)
-        backgroundColorView.frame = contentContainerView.bounds
-        backgroundImageView.frame = contentContainerView.bounds
-        [lowerNodeContainerView, selectedNodeHostView, upperNodeContainerView, drawingPreviewView].forEach {
-            $0.frame = CGRect(origin: .zero, size: canvasSize)
+        let shouldDisableAnimations = !hasCompletedInitialViewportLayout
+        performStageUpdates(disablingAnimations: shouldDisableAnimations) {
+            applyViewportLayout()
         }
-        drawingPreviewLayer.frame = drawingPreviewView.bounds
-        eraserMaskLayer.frame = contentContainerView.bounds
-        updateEraserMask()
-
-        updateSelectionOverlay()
-        updateInlineTextEditor()
+        hasCompletedInitialViewportLayout = true
     }
 
     func renderProject(_ project: CanvasProject) {
-        canvasSize = project.canvasSize.cgSize
+        pendingProject = project
 
-        backgroundColorView.backgroundColor = project.background.color?.uiColor ?? .clear
-        backgroundImageView.image = nil
-        if project.background.kind == .image {
-            assetLoader.image(for: project.background.source) { [weak self] image in
-                self?.backgroundImageView.image = image
-            }
+        guard hasRenderableBounds, hasCompletedInitialViewportLayout else {
+            setNeedsLayout()
+            return
         }
 
-        nodeViews.values.forEach { $0.removeFromSuperview() }
-        nodeViews.removeAll()
-
-        project.sortedNodes.forEach { node in
-            let nodeView = CanvasNodeView()
-            nodeView.apply(node: node, assetLoader: assetLoader)
-            nodeViews[node.id] = nodeView
-        }
-
-        syncNodePresentation()
-        canvasContainerView.bringSubviewToFront(drawingPreviewView)
-        canvasContainerView.bringSubviewToFront(selectionOverlay)
-        canvasContainerView.bringSubviewToFront(inlineTextView)
-        [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
-            canvasContainerView.bringSubviewToFront($0)
-        }
+        applyProject(project)
+        pendingProject = nil
         setNeedsLayout()
         layoutIfNeeded()
         updateEraserMask(strokes: project.eraserStrokes)
@@ -851,6 +858,78 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         eraserMaskLayer.contents = maskImage.cgImage
     }
 
+    private func applyProject(_ project: CanvasProject) {
+        canvasSize = project.canvasSize.cgSize
+
+        backgroundColorView.backgroundColor = project.background.color?.uiColor ?? .clear
+        backgroundImageView.image = nil
+        if project.background.kind == .image {
+            assetLoader.image(for: project.background.source) { [weak self] image in
+                self?.backgroundImageView.image = image
+            }
+        }
+
+        nodeViews.values.forEach { $0.removeFromSuperview() }
+        nodeViews.removeAll()
+
+        project.sortedNodes.forEach { node in
+            let nodeView = CanvasNodeView()
+            nodeView.apply(node: node, assetLoader: assetLoader)
+            nodeViews[node.id] = nodeView
+        }
+
+        syncNodePresentation()
+        canvasContainerView.bringSubviewToFront(drawingPreviewView)
+        canvasContainerView.bringSubviewToFront(selectionOverlay)
+        canvasContainerView.bringSubviewToFront(inlineTextView)
+        [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
+            overlayControlContainerView.bringSubviewToFront($0)
+        }
+        bringSubviewToFront(overlayControlContainerView)
+    }
+
+    private func applyViewportLayout() {
+        let layout = CanvasViewportMath.fit(canvasSize: canvasSize, in: bounds, padding: viewportPadding)
+        canvasScale = layout.scale
+
+        canvasContainerView.bounds = CGRect(origin: .zero, size: canvasSize)
+        canvasContainerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        canvasContainerView.transform = CGAffineTransform(scaleX: canvasScale, y: canvasScale)
+        overlayControlContainerView.frame = bounds
+        canvasContainerView.layer.shadowPath = UIBezierPath(
+            roundedRect: CGRect(origin: .zero, size: canvasSize),
+            cornerRadius: contentContainerView.layer.cornerRadius
+        ).cgPath
+
+        contentContainerView.frame = CGRect(origin: .zero, size: canvasSize)
+        backgroundColorView.frame = contentContainerView.bounds
+        backgroundImageView.frame = contentContainerView.bounds
+        [lowerNodeContainerView, selectedNodeHostView, upperNodeContainerView, drawingPreviewView].forEach {
+            $0.frame = CGRect(origin: .zero, size: canvasSize)
+        }
+        drawingPreviewLayer.frame = drawingPreviewView.bounds
+        eraserMaskLayer.frame = contentContainerView.bounds
+        updateEraserMask()
+
+        updateOverlayHandleMetrics()
+        updateSelectionOverlay()
+        updateInlineTextEditor()
+    }
+
+    private func performStageUpdates(disablingAnimations: Bool, updates: () -> Void) {
+        guard disablingAnimations else {
+            updates()
+            return
+        }
+
+        UIView.performWithoutAnimation {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            updates()
+            CATransaction.commit()
+        }
+    }
+
     private func rebindStore(oldValue: CanvasEditorStore?) {
         if let projectObserverID {
             oldValue?.removeObserver(projectObserverID)
@@ -913,6 +992,18 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         updateInlineEditingVisibility()
     }
 
+    private func updateOverlayHandleMetrics() {
+        let displayedCanvasShortSide = min(canvasSize.width, canvasSize.height) * max(canvasScale, 0)
+        let metrics = CanvasOverlayHandleLayoutMath.resolvedMetrics(
+            layout: CanvasEditorUIRuntime.currentConfiguration.layout,
+            displayedCanvasShortSide: displayedCanvasShortSide
+        )
+
+        [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
+            $0.updateMetrics(metrics)
+        }
+    }
+
     private func updateSelectionOverlay() {
         guard !isToolModeActive else {
             selectionOverlay.isHidden = true
@@ -950,20 +1041,34 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         canvasContainerView.bringSubviewToFront(selectionOverlay)
 
         let selectionRect = selectionOverlay.selectionRect
-        deleteHandle.center = selectionOverlay.convert(CGPoint(x: selectionRect.minX, y: selectionRect.minY), to: canvasContainerView)
-        widthHandle.center = selectionOverlay.convert(CGPoint(x: selectionRect.maxX, y: selectionRect.minY), to: canvasContainerView)
-        heightHandle.center = selectionOverlay.convert(CGPoint(x: selectionRect.minX, y: selectionRect.maxY), to: canvasContainerView)
-        transformHandle.center = selectionOverlay.convert(CGPoint(x: selectionRect.maxX, y: selectionRect.maxY), to: canvasContainerView)
+        deleteHandle.center = selectionOverlay.convert(
+            CGPoint(x: selectionRect.minX, y: selectionRect.minY),
+            to: overlayControlContainerView
+        )
+        widthHandle.center = selectionOverlay.convert(
+            CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
+            to: overlayControlContainerView
+        )
+        heightHandle.center = selectionOverlay.convert(
+            CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
+            to: overlayControlContainerView
+        )
+        transformHandle.center = selectionOverlay.convert(
+            CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
+            to: overlayControlContainerView
+        )
 
         deleteHandle.isHidden = false
         transformHandle.isHidden = false
         widthHandle.isHidden = selectedNode.kind != .text
         heightHandle.isHidden = selectedNode.kind != .text
 
+        let handleRotation = CGAffineTransform(rotationAngle: CGFloat(selectedNode.transform.rotation))
         [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
-            $0.transform = .identity
-            canvasContainerView.bringSubviewToFront($0)
+            $0.transform = handleRotation
+            overlayControlContainerView.bringSubviewToFront($0)
         }
+        bringSubviewToFront(overlayControlContainerView)
     }
 
     private func updateInlineTextEditor(forceTextRefresh: Bool = false) {

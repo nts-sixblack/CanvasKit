@@ -249,6 +249,33 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertLessThanOrEqual(imageNode.size.height, store.project.canvasSize.height * 0.42 + 0.001)
     }
 
+    func testOverlayHandleSizeClampsToMinimumForSmallDisplayedCanvas() {
+        let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
+            baseHandleSize: 60,
+            displayedCanvasShortSide: 180
+        )
+
+        XCTAssertEqual(resolved, 44, accuracy: 0.001)
+    }
+
+    func testOverlayHandleSizeClampsToMaximumForLargeDisplayedCanvas() {
+        let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
+            baseHandleSize: 60,
+            displayedCanvasShortSide: 520
+        )
+
+        XCTAssertEqual(resolved, 64, accuracy: 0.001)
+    }
+
+    func testOverlayHandleSizeScalesFromBaseSizeAtReferenceCanvas() {
+        let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
+            baseHandleSize: 60,
+            displayedCanvasShortSide: 390
+        )
+
+        XCTAssertEqual(resolved, 60, accuracy: 0.001)
+    }
+
     func testBatchEmojiInsertUsesSingleUndoAndStaggersPositions() {
         let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
         let initialCount = store.project.nodes.count

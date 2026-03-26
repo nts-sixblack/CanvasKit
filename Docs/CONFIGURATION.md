@@ -21,6 +21,7 @@
   - all primary user-facing copy inside the editor chrome
 - `layout`
   - key layout metrics for toolbar, inspector, overlay, and panel spacing
+  - `overlayHandleSize` is the base on-screen size for selection handles; runtime scales it to the displayed canvas with built-in min/max clamps
 - `resources`
   - bundle resolution for assets, fonts, and template JSON
 - `templates`

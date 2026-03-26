@@ -867,6 +867,13 @@ protocol CanvasBrushInspectorViewDelegate: AnyObject {
     func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didConfirm configuration: CanvasBrushConfiguration)
 }
 
+@MainActor
+protocol CanvasEraserInspectorViewDelegate: AnyObject {
+    func canvasEraserInspectorViewDidCancel(_ eraserInspectorView: CanvasEraserInspectorView)
+    func canvasEraserInspectorView(_ eraserInspectorView: CanvasEraserInspectorView, didChange strokeWidth: Double)
+    func canvasEraserInspectorView(_ eraserInspectorView: CanvasEraserInspectorView, didConfirm strokeWidth: Double)
+}
+
 final class CanvasBrushInspectorView: UIView {
     private enum Layout {
         static let horizontalInset: CGFloat = 18
@@ -1146,6 +1153,135 @@ final class CanvasBrushInspectorView: UIView {
 
     private func notifyConfigurationDidChange() {
         delegate?.canvasBrushInspectorView(self, didChange: currentConfiguration)
+    }
+}
+
+final class CanvasEraserInspectorView: UIView {
+    private enum Layout {
+        static let horizontalInset: CGFloat = 18
+        static let verticalInset: CGFloat = 14
+    }
+
+    weak var delegate: CanvasEraserInspectorViewDelegate?
+
+    private let scrollView = UIScrollView()
+    private let contentStack = UIStackView()
+    private let cancelButton = UIButton(type: .system)
+    private let titleLabel = UILabel()
+    private let confirmButton = UIButton(type: .system)
+    private let sizeRow = InspectorSliderRow(
+        title: CanvasEditorUIRuntime.currentConfiguration.strings.eraserSizeRowTitle,
+        range: 4...48
+    )
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = CanvasEditorTheme.sheetSurface
+        layer.cornerRadius = 28
+        layer.cornerCurve = .continuous
+
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scrollView)
+
+        contentStack.axis = .vertical
+        contentStack.spacing = 14
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(contentStack)
+
+        configureHeader()
+
+        sizeRow.onChange = { [weak self] value in
+            guard let self else { return }
+            self.delegate?.canvasEraserInspectorView(self, didChange: value)
+        }
+        contentStack.addArrangedSubview(sizeRow)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Layout.horizontalInset),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Layout.horizontalInset),
+            scrollView.topAnchor.constraint(equalTo: topAnchor, constant: Layout.verticalInset),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Layout.verticalInset),
+
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func apply(strokeWidth: Double) {
+        sizeRow.value = strokeWidth
+        invalidateContentLayout()
+    }
+
+    func preferredHeight(for width: CGFloat, maximumHeight: CGFloat) -> CGFloat {
+        let contentWidth = max(width - (Layout.horizontalInset * 2), 1)
+        invalidateContentLayout()
+        layoutIfNeeded()
+        let contentHeight = measuredContentHeight(for: contentWidth)
+        return min(maximumHeight, contentHeight + (Layout.verticalInset * 2))
+    }
+
+    private func configureHeader() {
+        cancelButton.configuration = .plain()
+        cancelButton.configuration?.image = UIImage(systemName: CanvasEditorUIRuntime.currentConfiguration.icons.close)
+        cancelButton.configuration?.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 22, weight: .bold)
+        cancelButton.configuration?.baseForegroundColor = CanvasEditorTheme.destructive
+        cancelButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        cancelButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.delegate?.canvasEraserInspectorViewDidCancel(self)
+        }, for: .touchUpInside)
+        cancelButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        cancelButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
+
+        titleLabel.text = CanvasEditorUIRuntime.currentConfiguration.strings.eraserInspectorTitle
+        titleLabel.font = CanvasEditorUIRuntime.currentConfiguration.theme.inspectorTitleFont.resolvedUIFont()
+        titleLabel.textColor = CanvasEditorTheme.primaryText
+        titleLabel.textAlignment = .center
+
+        confirmButton.configuration = .plain()
+        confirmButton.configuration?.image = UIImage(systemName: CanvasEditorUIRuntime.currentConfiguration.icons.confirm)
+        confirmButton.configuration?.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 22, weight: .bold)
+        confirmButton.configuration?.baseForegroundColor = CanvasEditorTheme.success
+        confirmButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        confirmButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.delegate?.canvasEraserInspectorView(self, didConfirm: self.sizeRow.value)
+        }, for: .touchUpInside)
+        confirmButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        confirmButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
+
+        let leadingSpacer = UIView()
+        let trailingSpacer = UIView()
+
+        let headerStack = UIStackView(arrangedSubviews: [cancelButton, leadingSpacer, titleLabel, trailingSpacer, confirmButton])
+        headerStack.axis = .horizontal
+        headerStack.alignment = .center
+        headerStack.spacing = 4
+        leadingSpacer.widthAnchor.constraint(equalTo: trailingSpacer.widthAnchor).isActive = true
+        contentStack.addArrangedSubview(headerStack)
+    }
+
+    private func measuredContentHeight(for width: CGFloat) -> CGFloat {
+        contentStack.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height
+    }
+
+    private func invalidateContentLayout() {
+        setNeedsLayout()
+        scrollView.setNeedsLayout()
+        contentStack.setNeedsLayout()
     }
 }
 #endif

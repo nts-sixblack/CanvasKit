@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+## 1.0.2
+
+- updated selection handles to rotate with the selected node without inheriting node scale, which removes the counter-rotation feel on rotated items
+- made selection handle sizing adaptive to the displayed canvas size with built-in minimum and maximum touch-target clamps
+
 ## 1.0.1
 
 - added `CanvasEditorHostingStyle.navigationStack` so SwiftUI hosts can push the editor through `NavigationStack` without showing duplicate navigation bars

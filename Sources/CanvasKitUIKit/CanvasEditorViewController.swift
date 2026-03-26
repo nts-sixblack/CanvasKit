@@ -36,19 +36,25 @@ private enum CanvasEditorOperationError: Error, Sendable {
     case exportPreparationFailed
 }
 
-private enum BrushInspectorMode {
+private enum BrushInspectorMode: Equatable {
     case create
     case edit
+}
+
+private enum ToolInspectorMode: Equatable {
+    case brush(BrushInspectorMode)
+    case eraser
 }
 
 private enum VisibleInspectorKind {
     case none
     case text
     case brush
+    case eraser
 }
 
 @MainActor
-public final class CanvasEditorViewController: UIViewController, CanvasTextInspectorViewDelegate, CanvasBrushInspectorViewDelegate, PHPickerViewControllerDelegate, UIColorPickerViewControllerDelegate, CanvasStageViewDelegate, CanvasLayerPanelViewDelegate {
+public final class CanvasEditorViewController: UIViewController, CanvasTextInspectorViewDelegate, CanvasBrushInspectorViewDelegate, CanvasEraserInspectorViewDelegate, PHPickerViewControllerDelegate, UIColorPickerViewControllerDelegate, CanvasStageViewDelegate, CanvasLayerPanelViewDelegate {
     public weak var delegate: CanvasEditorViewControllerDelegate?
 
     public let store: CanvasEditorStore
@@ -62,6 +68,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private let inspectorContainerView = UIView()
     private let textInspectorView: CanvasTextInspectorView
     private let brushInspectorView: CanvasBrushInspectorView
+    private let eraserInspectorView: CanvasEraserInspectorView
     private let loadingOverlayView: CanvasLoadingOverlayView
     private let layerPanelView: CanvasLayerPanelView
 
@@ -81,7 +88,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var layerPanelHeightConstraint: NSLayoutConstraint?
     private var isInspectorVisible = false
     private var isInspectorRequested = false
-    private var brushInspectorMode: BrushInspectorMode?
+    private var toolInspectorMode: ToolInspectorMode?
     private var isInlineEditingText = false
     private var isLayerPanelVisible = false
     private var lastSelectedNodeID: String?
@@ -97,6 +104,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         }
     }
     private var brushDraftConfiguration: CanvasBrushConfiguration?
+    private var eraserDraftStrokeWidth: Double?
     private var eraserStrokeWidth: Double = 24
     private var isBrushModeEnabled = false
     private var isEraserModeEnabled = false
@@ -182,6 +190,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         stageView = CanvasStageView()
         textInspectorView = CanvasTextInspectorView()
         brushInspectorView = CanvasBrushInspectorView()
+        eraserInspectorView = CanvasEraserInspectorView()
         loadingOverlayView = CanvasLoadingOverlayView()
         layerPanelView = CanvasLayerPanelView()
         super.init(nibName: nil, bundle: nil)
@@ -222,6 +231,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         textInspectorView.configure(fontFamilies: store.configuration.fontCatalog, palette: store.configuration.colorPalette)
         brushInspectorView.delegate = self
         brushInspectorView.configure(palette: store.configuration.colorPalette)
+        eraserInspectorView.delegate = self
         layerPanelView.delegate = self
 
         NotificationCenter.default.addObserver(
@@ -281,9 +291,12 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
         textInspectorView.translatesAutoresizingMaskIntoConstraints = false
         brushInspectorView.translatesAutoresizingMaskIntoConstraints = false
+        eraserInspectorView.translatesAutoresizingMaskIntoConstraints = false
         brushInspectorView.isHidden = true
+        eraserInspectorView.isHidden = true
         inspectorContainerView.addSubview(textInspectorView)
         inspectorContainerView.addSubview(brushInspectorView)
+        inspectorContainerView.addSubview(eraserInspectorView)
 
         inspectorBottomConstraint = inspectorContainerView.bottomAnchor.constraint(
             equalTo: view.bottomAnchor,
@@ -340,6 +353,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             brushInspectorView.trailingAnchor.constraint(equalTo: inspectorContainerView.trailingAnchor),
             brushInspectorView.topAnchor.constraint(equalTo: inspectorContainerView.topAnchor),
             brushInspectorView.bottomAnchor.constraint(equalTo: inspectorContainerView.bottomAnchor),
+
+            eraserInspectorView.leadingAnchor.constraint(equalTo: inspectorContainerView.leadingAnchor),
+            eraserInspectorView.trailingAnchor.constraint(equalTo: inspectorContainerView.trailingAnchor),
+            eraserInspectorView.topAnchor.constraint(equalTo: inspectorContainerView.topAnchor),
+            eraserInspectorView.bottomAnchor.constraint(equalTo: inspectorContainerView.bottomAnchor),
 
             panelScrimView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             panelScrimView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -410,8 +428,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             guard let self else { return }
             if selectedNodeID != self.lastSelectedNodeID {
                 self.isInspectorRequested = false
-                if self.brushInspectorMode == .edit {
-                    self.brushInspectorMode = nil
+                if self.toolInspectorMode == .brush(.edit) {
+                    self.toolInspectorMode = nil
                 }
             }
             if selectedNodeID == nil {
@@ -510,6 +528,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             contentHeight = textInspectorView.preferredHeight(for: view.bounds.width, maximumHeight: maximumContentHeight)
         case .brush:
             contentHeight = brushInspectorView.preferredHeight(for: view.bounds.width, maximumHeight: maximumContentHeight)
+        case .eraser:
+            contentHeight = eraserInspectorView.preferredHeight(for: view.bounds.width, maximumHeight: maximumContentHeight)
         case .none:
             contentHeight = maximumContentHeight
         }
@@ -556,7 +576,9 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             return
         }
         isInspectorRequested = false
-        brushInspectorMode = nil
+        toolInspectorMode = nil
+        brushDraftConfiguration = nil
+        eraserDraftStrokeWidth = nil
         updateVisibleInspector(animated: true)
     }
 
@@ -570,18 +592,23 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             return .none
         }
 
-        if let brushInspectorMode {
-            switch brushInspectorMode {
-            case .create:
-                return .brush
-            case .edit:
-                guard let node = store.selectedNode,
-                      node.kind == .shape,
-                      node.shape != nil else {
-                    self.brushInspectorMode = nil
-                    return .none
+        if let toolInspectorMode {
+            switch toolInspectorMode {
+            case .brush(let brushInspectorMode):
+                switch brushInspectorMode {
+                case .create:
+                    return .brush
+                case .edit:
+                    guard let node = store.selectedNode,
+                          node.kind == .shape,
+                          node.shape != nil else {
+                        self.toolInspectorMode = nil
+                        return .none
+                    }
+                    return .brush
                 }
-                return .brush
+            case .eraser:
+                return .eraser
             }
         }
 
@@ -599,6 +626,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         currentVisibleInspectorKind = visibleInspectorKind
         textInspectorView.isHidden = visibleInspectorKind != .text
         brushInspectorView.isHidden = visibleInspectorKind != .brush
+        eraserInspectorView.isHidden = visibleInspectorKind != .eraser
         setInspectorVisible(visibleInspectorKind != .none, animated: animated)
     }
 
@@ -745,12 +773,15 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         return button
     }
 
-    private func dismissInspector(animated: Bool, revertingBrushDraft: Bool = true) {
+    private func dismissInspector(animated: Bool, revertingBrushDraft: Bool = true, revertingEraserDraft: Bool = true) {
         if revertingBrushDraft {
             brushDraftConfiguration = nil
         }
+        if revertingEraserDraft {
+            eraserDraftStrokeWidth = nil
+        }
         isInspectorRequested = false
-        brushInspectorMode = nil
+        toolInspectorMode = nil
         updateVisibleInspector(animated: animated)
     }
 
@@ -763,9 +794,20 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private func presentBrushInspector(mode: BrushInspectorMode, configuration: CanvasBrushConfiguration) {
         setLayerPanelVisible(false, animated: true)
         isInspectorRequested = false
-        brushInspectorMode = mode
+        toolInspectorMode = .brush(mode)
         brushDraftConfiguration = configuration
+        eraserDraftStrokeWidth = nil
         brushInspectorView.apply(configuration: configuration)
+        updateVisibleInspector(animated: true)
+    }
+
+    private func presentEraserInspector(strokeWidth: Double) {
+        setLayerPanelVisible(false, animated: true)
+        isInspectorRequested = false
+        toolInspectorMode = .eraser
+        brushDraftConfiguration = nil
+        eraserDraftStrokeWidth = strokeWidth
+        eraserInspectorView.apply(strokeWidth: strokeWidth)
         updateVisibleInspector(animated: true)
     }
 
@@ -963,14 +1005,14 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didConfirm configuration: CanvasBrushConfiguration) {
         let resolvedConfiguration = brushDraftConfiguration ?? configuration
 
-        switch brushInspectorMode {
-        case .create:
+        switch toolInspectorMode {
+        case .brush(.create):
             committedBrushConfiguration = resolvedConfiguration
             brushDraftConfiguration = nil
             dismissInspector(animated: true, revertingBrushDraft: false)
             setBrushModeEnabled(true, animated: true, configuration: resolvedConfiguration)
 
-        case .edit:
+        case .brush(.edit):
             brushDraftConfiguration = nil
             store.updateSelectedShapeStyle(
                 type: resolvedConfiguration.type,
@@ -980,9 +1022,28 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             )
             dismissInspector(animated: true, revertingBrushDraft: false)
 
+        case .eraser:
+            dismissInspector(animated: true)
+
         case .none:
             dismissInspector(animated: true)
         }
+    }
+
+    func canvasEraserInspectorViewDidCancel(_ eraserInspectorView: CanvasEraserInspectorView) {
+        dismissInspector(animated: true)
+    }
+
+    func canvasEraserInspectorView(_ eraserInspectorView: CanvasEraserInspectorView, didChange strokeWidth: Double) {
+        eraserDraftStrokeWidth = strokeWidth
+    }
+
+    func canvasEraserInspectorView(_ eraserInspectorView: CanvasEraserInspectorView, didConfirm strokeWidth: Double) {
+        let resolvedStrokeWidth = eraserDraftStrokeWidth ?? strokeWidth
+        eraserStrokeWidth = resolvedStrokeWidth
+        eraserDraftStrokeWidth = nil
+        dismissInspector(animated: true, revertingBrushDraft: false, revertingEraserDraft: false)
+        setEraserModeEnabled(true, animated: true)
     }
 
     func canvasStageViewDidTapSelectedTextNode(_ stageView: CanvasStageView) {
@@ -991,7 +1052,9 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         }
         cancelActiveToolMode()
         setLayerPanelVisible(false, animated: true)
-        brushInspectorMode = nil
+        toolInspectorMode = nil
+        brushDraftConfiguration = nil
+        eraserDraftStrokeWidth = nil
         isInspectorRequested.toggle()
         refreshChrome()
     }
@@ -1004,7 +1067,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             return
         }
 
-        if brushInspectorMode == .edit, !brushInspectorView.isHidden {
+        if toolInspectorMode == .brush(.edit), !brushInspectorView.isHidden {
             dismissInspector(animated: true)
             return
         }
@@ -1018,7 +1081,9 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     func canvasStageViewDidBeginInlineEditing(_ stageView: CanvasStageView) {
         isInlineEditingText = true
         isInspectorRequested = false
-        brushInspectorMode = nil
+        toolInspectorMode = nil
+        brushDraftConfiguration = nil
+        eraserDraftStrokeWidth = nil
         updateVisibleInspector(animated: true)
     }
 
@@ -1028,11 +1093,13 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     func canvasStageViewDidBeginNodeManipulation(_ stageView: CanvasStageView) {
-        guard isInspectorRequested || brushInspectorMode != nil || isInspectorVisible else {
+        guard isInspectorRequested || toolInspectorMode != nil || isInspectorVisible else {
             return
         }
         isInspectorRequested = false
-        brushInspectorMode = nil
+        toolInspectorMode = nil
+        brushDraftConfiguration = nil
+        eraserDraftStrokeWidth = nil
         updateVisibleInspector(animated: true)
     }
 
@@ -1256,7 +1323,13 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     @objc
     private func eraserTapped() {
-        setEraserModeEnabled(!isEraserModeEnabled, animated: true)
+        if isEraserModeEnabled {
+            setEraserModeEnabled(false, animated: true)
+            return
+        }
+
+        cancelActiveToolMode()
+        presentEraserInspector(strokeWidth: eraserStrokeWidth)
     }
 
     @objc
