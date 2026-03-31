@@ -559,6 +559,34 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertEqual(Self.alpha(in: context, x: 32, y: 0), 255)
     }
 
+    func testEraserMaskPathCreatesTransparentHoleWithEvenOddFill() {
+        guard let context = Self.makeBitmapContext(width: 64, height: 64) else {
+            XCTFail("Expected bitmap context")
+            return
+        }
+
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.addPath(
+            CanvasEraserPathBuilder.makeMaskPath(
+                in: CGRect(x: 0, y: 0, width: 64, height: 64),
+                strokes: [
+                    CanvasEraserStroke(
+                        points: [
+                            CanvasPoint(x: 8, y: 48),
+                            CanvasPoint(x: 32, y: 16),
+                            CanvasPoint(x: 56, y: 48)
+                        ],
+                        strokeWidth: 24
+                    )
+                ]
+            )
+        )
+        context.drawPath(using: .eoFill)
+
+        XCTAssertEqual(Self.alpha(in: context, x: 32, y: 28), 0)
+        XCTAssertEqual(Self.alpha(in: context, x: 32, y: 0), 255)
+    }
+
     func testProjectSummaryDetectsProjectsWithoutInlineImages() {
         let project = CanvasProject(template: Self.sampleTemplate)
 

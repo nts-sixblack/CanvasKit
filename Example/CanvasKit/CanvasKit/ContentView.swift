@@ -31,6 +31,9 @@ struct ContentView: View {
                         Image(uiImage: savedDocument.previewImage)
                             .resizable()
                             .scaledToFit()
+                            .background {
+                                ExampleTransparencyCheckerboard()
+                            }
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                         Button("Resume Last Project") {
@@ -73,6 +76,37 @@ private struct CanvasEditorExampleScreen: View {
                 dismiss()
             }
         )
+    }
+}
+
+private struct ExampleTransparencyCheckerboard: View {
+    private let cellSize: CGFloat = 8
+    private let lightColor = Color.white
+    private let darkColor = Color(red: 0.9, green: 0.9, blue: 0.9)
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .color(lightColor)
+            )
+
+            let rows = Int(ceil(size.height / cellSize))
+            let columns = Int(ceil(size.width / cellSize))
+
+            for row in 0...rows {
+                for column in 0...columns where (row + column).isMultiple(of: 2) {
+                    let cellRect = CGRect(
+                        x: CGFloat(column) * cellSize,
+                        y: CGFloat(row) * cellSize,
+                        width: cellSize,
+                        height: cellSize
+                    )
+                    context.fill(Path(cellRect), with: .color(darkColor))
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
