@@ -622,12 +622,25 @@ public struct CanvasStickerDescriptor: Hashable, Identifiable, Sendable {
     }
 }
 
+public struct CanvasSignatureDescriptor: Codable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var source: CanvasAssetSource
+
+    public init(id: String, name: String, source: CanvasAssetSource) {
+        self.id = id
+        self.name = name
+        self.source = source
+    }
+}
+
 public enum CanvasEditorTool: String, Codable, CaseIterable, Sendable {
     case addBrush
     case addText
     case addEmoji
     case addSticker
     case addImage
+    case addSignature
     case addRemoteImage
     case duplicate
     case delete

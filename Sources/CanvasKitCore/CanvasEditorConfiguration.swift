@@ -75,6 +75,35 @@ public struct CanvasEditorFeatures: Codable, Hashable, Sendable {
     }
 }
 
+@MainActor
+public protocol CanvasSignatureStore: AnyObject {
+    func loadSignatures() async throws -> [CanvasSignatureDescriptor]
+    func saveSignature(_ signature: CanvasSignatureDescriptor) async throws -> CanvasSignatureDescriptor
+    func deleteSignature(id: String) async throws
+}
+
+public struct CanvasSignatureConfiguration {
+    public var store: CanvasSignatureStore?
+    public var defaultColor: CanvasColor
+    public var defaultLineWidth: Double
+    public var lineWidthRange: ClosedRange<Double>
+    public var palette: [CanvasColor]?
+
+    public init(
+        store: CanvasSignatureStore? = nil,
+        defaultColor: CanvasColor = .black,
+        defaultLineWidth: Double = 4,
+        lineWidthRange: ClosedRange<Double> = 1...24,
+        palette: [CanvasColor]? = nil
+    ) {
+        self.store = store
+        self.defaultColor = defaultColor
+        self.defaultLineWidth = min(max(defaultLineWidth, lineWidthRange.lowerBound), lineWidthRange.upperBound)
+        self.lineWidthRange = lineWidthRange
+        self.palette = palette
+    }
+}
+
 public struct CanvasEditorTheme: Codable, Hashable, Sendable {
     public var canvasBackdropColor: CanvasColor
     public var sheetSurfaceColor: CanvasColor
@@ -204,6 +233,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
     public var addEmojiTool: String
     public var addStickerTool: String
     public var addPhotoTool: String
+    public var addSignatureTool: String
     public var eraserTool: String
     public var brushTool: String
     public var duplicateTool: String
@@ -238,6 +268,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
         addEmojiTool: String = "face.smiling",
         addStickerTool: String = "sparkles",
         addPhotoTool: String = "photo.on.rectangle",
+        addSignatureTool: String = "signature",
         eraserTool: String = "eraser",
         brushTool: String = "paintbrush",
         duplicateTool: String = "plus.square.on.square",
@@ -271,6 +302,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
         self.addEmojiTool = addEmojiTool
         self.addStickerTool = addStickerTool
         self.addPhotoTool = addPhotoTool
+        self.addSignatureTool = addSignatureTool
         self.eraserTool = eraserTool
         self.brushTool = brushTool
         self.duplicateTool = duplicateTool
@@ -317,6 +349,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var addEmojiToolTitle: String
     public var addStickerToolTitle: String
     public var addPhotoToolTitle: String
+    public var addSignatureToolTitle: String
     public var eraserToolTitle: String
     public var brushToolTitle: String
     public var duplicateToolTitle: String
@@ -363,6 +396,19 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var layerShapeFallbackTitle: String
     public var imagePlaceholderTitle: String
     public var imageLoadingTitle: String
+    public var signatureEditorTitle: String
+    public var signaturePlaceholderTitle: String
+    public var signaturePlaceholderSubtitle: String
+    public var signatureCancelButtonTitle: String
+    public var signatureDoneButtonTitle: String
+    public var signatureAddButtonTitle: String
+    public var signatureNewItemTitle: String
+    public var loadingSignaturesMessage: String
+    public var savingSignatureMessage: String
+    public var loadSignaturesFailureMessage: String
+    public var saveSignatureFailureMessage: String
+    public var deleteSignatureFailureMessage: String
+    public var deleteSignatureConfirmationMessage: String
     public var pickerTextColorAccessibilityLabel: String
     public var pickerBackgroundColorAccessibilityLabel: String
     public var pickerShadowColorAccessibilityLabel: String
@@ -384,6 +430,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         addEmojiToolTitle: String = "Emoji",
         addStickerToolTitle: String = "Sticker",
         addPhotoToolTitle: String = "Photo",
+        addSignatureToolTitle: String = "Signature",
         eraserToolTitle: String = "Eraser",
         brushToolTitle: String = "Brush",
         duplicateToolTitle: String = "Duplicate",
@@ -430,6 +477,19 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         layerShapeFallbackTitle: String = "Shape",
         imagePlaceholderTitle: String = "Image",
         imageLoadingTitle: String = "Loading...",
+        signatureEditorTitle: String = "Add New Signature",
+        signaturePlaceholderTitle: String = "Sign here",
+        signaturePlaceholderSubtitle: String = "Please sign formally and clearly",
+        signatureCancelButtonTitle: String = "Cancel",
+        signatureDoneButtonTitle: String = "Done",
+        signatureAddButtonTitle: String = "Add",
+        signatureNewItemTitle: String = "New",
+        loadingSignaturesMessage: String = "Loading signatures...",
+        savingSignatureMessage: String = "Saving signature...",
+        loadSignaturesFailureMessage: String = "Unable to load signatures.",
+        saveSignatureFailureMessage: String = "Unable to save signature.",
+        deleteSignatureFailureMessage: String = "Unable to delete signature.",
+        deleteSignatureConfirmationMessage: String = "Delete this signature?",
         pickerTextColorAccessibilityLabel: String = "Pick text color",
         pickerBackgroundColorAccessibilityLabel: String = "Pick background color",
         pickerShadowColorAccessibilityLabel: String = "Pick shadow color",
@@ -450,6 +510,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.addEmojiToolTitle = addEmojiToolTitle
         self.addStickerToolTitle = addStickerToolTitle
         self.addPhotoToolTitle = addPhotoToolTitle
+        self.addSignatureToolTitle = addSignatureToolTitle
         self.eraserToolTitle = eraserToolTitle
         self.brushToolTitle = brushToolTitle
         self.duplicateToolTitle = duplicateToolTitle
@@ -496,6 +557,19 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.layerShapeFallbackTitle = layerShapeFallbackTitle
         self.imagePlaceholderTitle = imagePlaceholderTitle
         self.imageLoadingTitle = imageLoadingTitle
+        self.signatureEditorTitle = signatureEditorTitle
+        self.signaturePlaceholderTitle = signaturePlaceholderTitle
+        self.signaturePlaceholderSubtitle = signaturePlaceholderSubtitle
+        self.signatureCancelButtonTitle = signatureCancelButtonTitle
+        self.signatureDoneButtonTitle = signatureDoneButtonTitle
+        self.signatureAddButtonTitle = signatureAddButtonTitle
+        self.signatureNewItemTitle = signatureNewItemTitle
+        self.loadingSignaturesMessage = loadingSignaturesMessage
+        self.savingSignatureMessage = savingSignatureMessage
+        self.loadSignaturesFailureMessage = loadSignaturesFailureMessage
+        self.saveSignatureFailureMessage = saveSignatureFailureMessage
+        self.deleteSignatureFailureMessage = deleteSignatureFailureMessage
+        self.deleteSignatureConfirmationMessage = deleteSignatureConfirmationMessage
         self.pickerTextColorAccessibilityLabel = pickerTextColorAccessibilityLabel
         self.pickerBackgroundColorAccessibilityLabel = pickerBackgroundColorAccessibilityLabel
         self.pickerShadowColorAccessibilityLabel = pickerShadowColorAccessibilityLabel
@@ -597,6 +671,7 @@ public struct CanvasEditorResources {
 public struct CanvasEditorConfiguration {
     public var fonts: CanvasFontCatalog
     public var stickers: [CanvasStickerDescriptor]
+    public var signatures: CanvasSignatureConfiguration
     public var colors: [CanvasColor]
     public var exportMaxDimension: Double
     public var features: CanvasEditorFeatures
@@ -610,6 +685,7 @@ public struct CanvasEditorConfiguration {
     public init(
         fonts: CanvasFontCatalog,
         stickers: [CanvasStickerDescriptor],
+        signatures: CanvasSignatureConfiguration = .init(),
         colors: [CanvasColor],
         exportMaxDimension: Double = 2_048,
         features: CanvasEditorFeatures = .init(),
@@ -622,6 +698,7 @@ public struct CanvasEditorConfiguration {
     ) {
         self.fonts = fonts
         self.stickers = stickers
+        self.signatures = signatures
         self.colors = colors
         self.exportMaxDimension = exportMaxDimension
         self.features = features

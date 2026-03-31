@@ -79,7 +79,7 @@ final class CanvasKitExampleStore: ObservableObject {
         )
     }
 
-    private static func storageDirectory() -> URL {
+    fileprivate static func storageDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("CanvasKitExample", isDirectory: true)
     }
@@ -90,4 +90,68 @@ struct SavedCanvasDocument {
     let project: CanvasProject?
     let imageURL: URL
     let projectURL: URL
+}
+
+@MainActor
+final class CanvasKitExampleSignatureStore: CanvasSignatureStore {
+    static let shared = CanvasKitExampleSignatureStore()
+
+    private var cachedSignatures: [CanvasSignatureDescriptor]?
+
+    func loadSignatures() async throws -> [CanvasSignatureDescriptor] {
+        if let cachedSignatures {
+            return cachedSignatures
+        }
+
+        let signaturesURL = Self.signaturesURL()
+        guard let data = try? Data(contentsOf: signaturesURL) else {
+            cachedSignatures = []
+            return []
+        }
+
+        let signatures = try JSONDecoder().decode([CanvasSignatureDescriptor].self, from: data)
+        cachedSignatures = signatures
+        return signatures
+    }
+
+    func saveSignature(_ signature: CanvasSignatureDescriptor) async throws -> CanvasSignatureDescriptor {
+        let folderURL = CanvasKitExampleStore.storageDirectory()
+        try FileManager.default.createDirectory(
+            at: folderURL,
+            withIntermediateDirectories: true
+        )
+
+        var signatures = try await loadSignatures()
+        signatures.removeAll(where: { $0.id == signature.id })
+        signatures.insert(signature, at: 0)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(signatures)
+        try data.write(to: Self.signaturesURL(), options: .atomic)
+        cachedSignatures = signatures
+        return signature
+    }
+
+    func deleteSignature(id: String) async throws {
+        let folderURL = CanvasKitExampleStore.storageDirectory()
+        try FileManager.default.createDirectory(
+            at: folderURL,
+            withIntermediateDirectories: true
+        )
+
+        var signatures = try await loadSignatures()
+        signatures.removeAll(where: { $0.id == id })
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(signatures)
+        try data.write(to: Self.signaturesURL(), options: .atomic)
+        cachedSignatures = signatures
+    }
+
+    private static func signaturesURL() -> URL {
+        CanvasKitExampleStore.storageDirectory()
+            .appendingPathComponent("signatures.json")
+    }
 }

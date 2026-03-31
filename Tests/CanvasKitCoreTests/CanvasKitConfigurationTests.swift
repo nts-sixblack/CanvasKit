@@ -61,4 +61,18 @@ final class CanvasKitConfigurationTests: XCTestCase {
             features
         )
     }
+
+    func testSignatureToolIsAvailableInToolCatalog() {
+        XCTAssertTrue(CanvasEditorTool.allCases.contains(.addSignature))
+    }
+
+    func testSignatureConfigurationDefaults() {
+        let signatures = CanvasSignatureConfiguration()
+
+        XCTAssertNil(signatures.store)
+        XCTAssertEqual(signatures.defaultColor, .black)
+        XCTAssertEqual(signatures.defaultLineWidth, 4)
+        XCTAssertEqual(signatures.lineWidthRange, 1...24)
+        XCTAssertNil(signatures.palette)
+    }
 }
