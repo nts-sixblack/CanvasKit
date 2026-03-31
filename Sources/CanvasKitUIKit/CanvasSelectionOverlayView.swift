@@ -55,11 +55,7 @@ final class OverlayHandleControl: UIControl {
 
     init(systemImage: String, tintColor: UIColor = .black) {
         let layout = CanvasEditorUIRuntime.currentConfiguration.layout
-        metrics = CanvasOverlayHandleMetrics(
-            handleSize: CGFloat(layout.overlayHandleSize),
-            cornerRadius: CGFloat(layout.overlayHandleCornerRadius),
-            symbolPointSize: CGFloat(layout.overlayHandleSize) * 0.55
-        )
+        metrics = CanvasOverlayHandleLayoutMath.defaultMetrics(layout: layout)
         super.init(frame: CGRect(origin: .zero, size: CGSize(width: metrics.handleSize, height: metrics.handleSize)))
         backgroundColor = CanvasEditorTheme.overlayHandleBackground
         layer.shadowColor = CanvasEditorTheme.overlayHandleShadow.cgColor

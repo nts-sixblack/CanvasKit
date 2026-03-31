@@ -16,6 +16,24 @@ final class CanvasKitExampleStore: ObservableObject {
         loadSavedDocument()
     }
 
+    func makeBackgroundEditorInput(imageData: Data, mimeType: String) -> CanvasEditorInput? {
+        guard let image = UIImage(data: imageData),
+              image.size.width > 0,
+              image.size.height > 0 else {
+            return nil
+        }
+
+        let now = Date()
+        let project = CanvasProject(
+            templateID: "example-photo-background",
+            canvasSize: CanvasSize(image.size),
+            background: .image(.inlineImage(data: imageData, mimeType: mimeType)),
+            nodes: [],
+            metadata: CanvasProjectMetadata(createdAt: now, modifiedAt: now)
+        )
+        return .project(project)
+    }
+
     func save(result: CanvasEditorResult, previewImage: UIImage) {
         let folderURL = Self.storageDirectory()
         let fileManager = FileManager.default

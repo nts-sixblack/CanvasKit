@@ -49,6 +49,18 @@ extension CanvasShapeType {
     }
 }
 
+enum CanvasSymbolNodeLayout {
+    private static let minimumPointSize: CGFloat = 18
+    private static let defaultPointSize: CGFloat = 40
+    private static let maximumSizeRatio: CGFloat = 0.72
+
+    static func symbolPointSize(for node: CanvasNode) -> CGFloat {
+        let preferredPointSize = CGFloat(node.style?.fontSize ?? Double(defaultPointSize))
+        let maxPointSize = max(min(node.size.width, node.size.height) * maximumSizeRatio, minimumPointSize)
+        return min(max(preferredPointSize, minimumPointSize), maxPointSize)
+    }
+}
+
 enum CanvasShapePathBuilder {
     static func localPoints(for payload: CanvasShapePayload) -> [CGPoint] {
         payload.points.map(\.cgPoint)

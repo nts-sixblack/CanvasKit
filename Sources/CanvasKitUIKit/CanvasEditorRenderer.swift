@@ -94,7 +94,7 @@ enum CanvasEditorRenderer {
 
         if node.source?.kind == .symbol {
             let symbolConfig = UIImage.SymbolConfiguration(
-                pointSize: max(rect.width, rect.height) * 0.6,
+                pointSize: CanvasSymbolNodeLayout.symbolPointSize(for: node),
                 weight: .bold
             )
             let tintedSymbol = image

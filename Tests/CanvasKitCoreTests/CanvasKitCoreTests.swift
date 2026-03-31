@@ -42,6 +42,48 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertTrue(store.project.nodes.contains(where: { $0.id == addedID }))
     }
 
+    func testAddTextNodeScalesDefaultLayoutForSmallCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 540, height: 720)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 220, height: 112))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 30)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 8)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 6)
+    }
+
+    func testAddTextNodeKeepsBaselineLayoutForReferenceCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 1080, height: 1350)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 320, height: 168))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 54)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 14)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 10)
+    }
+
+    func testAddTextNodeScalesDefaultLayoutForLargeCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 2160, height: 2700)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 640, height: 336))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 108)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 28)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 20)
+    }
+
     func testStoreNormalizesZOrderWhenReordering() {
         let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
         let middleNodeID = store.project.sortedNodes[1].id
@@ -255,7 +297,7 @@ final class CanvasEditorCoreTests: XCTestCase {
             displayedCanvasShortSide: 180
         )
 
-        XCTAssertEqual(resolved, 44, accuracy: 0.001)
+        XCTAssertEqual(resolved, 36, accuracy: 0.001)
     }
 
     func testOverlayHandleSizeClampsToMaximumForLargeDisplayedCanvas() {
@@ -264,16 +306,27 @@ final class CanvasEditorCoreTests: XCTestCase {
             displayedCanvasShortSide: 520
         )
 
-        XCTAssertEqual(resolved, 64, accuracy: 0.001)
+        XCTAssertEqual(resolved, 52, accuracy: 0.001)
     }
 
     func testOverlayHandleSizeScalesFromBaseSizeAtReferenceCanvas() {
         let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
-            baseHandleSize: 60,
+            baseHandleSize: 48,
             displayedCanvasShortSide: 390
         )
 
-        XCTAssertEqual(resolved, 60, accuracy: 0.001)
+        XCTAssertEqual(resolved, 48, accuracy: 0.001)
+    }
+
+    func testOverlayHandleMetricsUseSmallerSymbolRatio() {
+        let metrics = CanvasOverlayHandleLayoutMath.resolvedMetrics(
+            layout: CanvasEditorLayout(),
+            displayedCanvasShortSide: 390
+        )
+
+        XCTAssertEqual(metrics.handleSize, 48, accuracy: 0.001)
+        XCTAssertEqual(metrics.cornerRadius, 24, accuracy: 0.001)
+        XCTAssertEqual(metrics.symbolPointSize, 21.12, accuracy: 0.001)
     }
 
     func testBatchEmojiInsertUsesSingleUndoAndStaggersPositions() {
@@ -677,6 +730,16 @@ final class CanvasEditorCoreTests: XCTestCase {
                     style: .defaultText
                 )
             ]
+        )
+    }
+
+    private static func emptyTemplate(canvasSize: CanvasSize) -> CanvasTemplate {
+        CanvasTemplate(
+            id: "empty-template-\(Int(canvasSize.width))x\(Int(canvasSize.height))",
+            name: "Empty Template",
+            canvasSize: canvasSize,
+            background: .solid(CanvasColor(hex: "122034")),
+            nodes: []
         )
     }
 

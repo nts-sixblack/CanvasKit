@@ -114,7 +114,7 @@ final class CanvasNodeView: UIView {
 
         if node.source?.kind == .symbol {
             imageView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
-                pointSize: max(bounds.width, bounds.height) * 0.6,
+                pointSize: CanvasSymbolNodeLayout.symbolPointSize(for: node),
                 weight: .bold
             )
             imageView.contentMode = .scaleAspectFit
