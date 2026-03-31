@@ -26,6 +26,8 @@ enum CanvasKitExampleConfiguration {
             .addEmoji,
             .addSticker,
             .addImage,
+            .filter,
+            .addSignature,
             .addBrush,
             .duplicate,
             .delete,
@@ -33,6 +35,12 @@ enum CanvasKitExampleConfiguration {
             .redo,
             .export
         ]
+
+        configuration.signatures = CanvasSignatureConfiguration(
+            store: CanvasKitExampleSignatureStore.shared,
+            defaultColor: .black,
+            defaultLineWidth: 4
+        )
 
         configuration.theme = CanvasEditorTheme(
             canvasBackdropColor: CanvasColor(hex: "F3EEE8"),
@@ -54,6 +62,8 @@ enum CanvasKitExampleConfiguration {
             addEmojiTool: "face.smiling.inverse",
             addStickerTool: "seal.fill",
             addPhotoTool: "photo.stack",
+            filterTool: "camera.filters",
+            addSignatureTool: "signature",
             brushTool: "paintbrush.pointed.fill",
             duplicateTool: "square.on.square",
             layers: "square.3.stack.3d.top.filled",

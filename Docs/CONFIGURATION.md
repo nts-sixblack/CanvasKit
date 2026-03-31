@@ -9,6 +9,8 @@
   - optional bundled font files to auto-register from configured bundles
 - `stickers`
   - sticker catalog used by the sticker picker
+- `signatures`
+  - shared signature provider plus signature-specific drawing defaults
 - `colors`
   - editor palette for text/background/shadow/outline and brush color selection
 - `features`
@@ -40,7 +42,32 @@ configuration.theme.sheetTitleFont = .init(
 )
 configuration.strings.exportButtonTitle = "Save"
 configuration.icons.addStickerTool = "seal.fill"
+
+@MainActor
+final class SharedSignatureStore: CanvasSignatureStore {
+    private var signatures: [CanvasSignatureDescriptor] = []
+
+    func loadSignatures() async throws -> [CanvasSignatureDescriptor] {
+        signatures
+    }
+
+    func saveSignature(_ signature: CanvasSignatureDescriptor) async throws -> CanvasSignatureDescriptor {
+        signatures.insert(signature, at: 0)
+        return signature
+    }
+
+    func deleteSignature(id: String) async throws {
+        signatures.removeAll { $0.id == id }
+    }
+}
+
+let signatureStore = SharedSignatureStore()
+configuration.signatures = CanvasSignatureConfiguration(store: signatureStore)
+configuration.features.enabledTools.append(.addSignature)
 ```
+
+`configuration.signatures.palette` defaults to `configuration.colors`.
+`configuration.signatures.store` is the shared source of truth, so multiple editor instances can reuse the same saved signatures when they receive the same store instance.
 
 ## Legacy aliases
 

@@ -42,6 +42,48 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertTrue(store.project.nodes.contains(where: { $0.id == addedID }))
     }
 
+    func testAddTextNodeScalesDefaultLayoutForSmallCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 540, height: 720)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 220, height: 112))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 30)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 8)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 6)
+    }
+
+    func testAddTextNodeKeepsBaselineLayoutForReferenceCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 1080, height: 1350)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 320, height: 168))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 54)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 14)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 10)
+    }
+
+    func testAddTextNodeScalesDefaultLayoutForLargeCanvas() {
+        let store = CanvasEditorStore(
+            template: Self.emptyTemplate(canvasSize: CanvasSize(width: 2160, height: 2700)),
+            configuration: .demo
+        )
+
+        store.addTextNode(text: "Hello")
+
+        XCTAssertEqual(store.selectedNode?.size, CanvasSize(width: 640, height: 336))
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 108)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.radius, 28)
+        XCTAssertEqual(store.selectedNode?.style?.shadow?.offsetY, 20)
+    }
+
     func testStoreNormalizesZOrderWhenReordering() {
         let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
         let middleNodeID = store.project.sortedNodes[1].id
@@ -255,7 +297,7 @@ final class CanvasEditorCoreTests: XCTestCase {
             displayedCanvasShortSide: 180
         )
 
-        XCTAssertEqual(resolved, 44, accuracy: 0.001)
+        XCTAssertEqual(resolved, 36, accuracy: 0.001)
     }
 
     func testOverlayHandleSizeClampsToMaximumForLargeDisplayedCanvas() {
@@ -264,16 +306,27 @@ final class CanvasEditorCoreTests: XCTestCase {
             displayedCanvasShortSide: 520
         )
 
-        XCTAssertEqual(resolved, 64, accuracy: 0.001)
+        XCTAssertEqual(resolved, 52, accuracy: 0.001)
     }
 
     func testOverlayHandleSizeScalesFromBaseSizeAtReferenceCanvas() {
         let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
-            baseHandleSize: 60,
+            baseHandleSize: 48,
             displayedCanvasShortSide: 390
         )
 
-        XCTAssertEqual(resolved, 60, accuracy: 0.001)
+        XCTAssertEqual(resolved, 48, accuracy: 0.001)
+    }
+
+    func testOverlayHandleMetricsUseSmallerSymbolRatio() {
+        let metrics = CanvasOverlayHandleLayoutMath.resolvedMetrics(
+            layout: CanvasEditorLayout(),
+            displayedCanvasShortSide: 390
+        )
+
+        XCTAssertEqual(metrics.handleSize, 48, accuracy: 0.001)
+        XCTAssertEqual(metrics.cornerRadius, 24, accuracy: 0.001)
+        XCTAssertEqual(metrics.symbolPointSize, 21.12, accuracy: 0.001)
     }
 
     func testBatchEmojiInsertUsesSingleUndoAndStaggersPositions() {
@@ -398,6 +451,57 @@ final class CanvasEditorCoreTests: XCTestCase {
 
         XCTAssertEqual(decoded.version, CanvasSchemaVersion.current)
         XCTAssertEqual(decoded.eraserStrokes, project.eraserStrokes)
+    }
+
+    func testProjectCanvasFilterRoundTripPreservesData() throws {
+        let project = CanvasProject(
+            templateID: "filter-template",
+            canvasSize: CanvasSize(width: 1080, height: 1920),
+            background: .solid(.black),
+            nodes: [],
+            canvasFilter: .vibrant
+        )
+
+        let data = try JSONEncoder().encode(project)
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: data)
+
+        XCTAssertEqual(decoded.version, CanvasSchemaVersion.current)
+        XCTAssertEqual(decoded.canvasFilter, .vibrant)
+    }
+
+    func testLegacyProjectDecodesMissingCanvasFilterAsNormal() throws {
+        let legacyData = Data(
+            """
+            {
+              "version": 3,
+              "templateID": "legacy-template",
+              "canvasSize": { "width": 1080, "height": 1920 },
+              "background": { "kind": "solidColor", "color": { "red": 0, "green": 0, "blue": 0, "alpha": 1 } },
+              "nodes": [],
+              "eraserStrokes": [],
+              "metadata": {}
+            }
+            """.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: legacyData)
+
+        XCTAssertEqual(decoded.canvasFilter, .normal)
+    }
+
+    func testStoreUpdateCanvasFilterSupportsUndoRedo() {
+        let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
+
+        XCTAssertEqual(store.project.canvasFilter, .normal)
+
+        store.updateCanvasFilter(.mono)
+        XCTAssertEqual(store.project.canvasFilter, .mono)
+
+        store.undo()
+        XCTAssertEqual(store.project.canvasFilter, .normal)
+
+        store.redo()
+        XCTAssertEqual(store.project.canvasFilter, .mono)
     }
 
     func testStoreAddShapeNodeSupportsUndoRedo() {
@@ -559,6 +663,34 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertEqual(Self.alpha(in: context, x: 32, y: 0), 255)
     }
 
+    func testEraserMaskPathCreatesTransparentHoleWithEvenOddFill() {
+        guard let context = Self.makeBitmapContext(width: 64, height: 64) else {
+            XCTFail("Expected bitmap context")
+            return
+        }
+
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.addPath(
+            CanvasEraserPathBuilder.makeMaskPath(
+                in: CGRect(x: 0, y: 0, width: 64, height: 64),
+                strokes: [
+                    CanvasEraserStroke(
+                        points: [
+                            CanvasPoint(x: 8, y: 48),
+                            CanvasPoint(x: 32, y: 16),
+                            CanvasPoint(x: 56, y: 48)
+                        ],
+                        strokeWidth: 24
+                    )
+                ]
+            )
+        )
+        context.drawPath(using: .eoFill)
+
+        XCTAssertEqual(Self.alpha(in: context, x: 32, y: 28), 0)
+        XCTAssertEqual(Self.alpha(in: context, x: 32, y: 0), 255)
+    }
+
     func testProjectSummaryDetectsProjectsWithoutInlineImages() {
         let project = CanvasProject(template: Self.sampleTemplate)
 
@@ -649,6 +781,16 @@ final class CanvasEditorCoreTests: XCTestCase {
                     style: .defaultText
                 )
             ]
+        )
+    }
+
+    private static func emptyTemplate(canvasSize: CanvasSize) -> CanvasTemplate {
+        CanvasTemplate(
+            id: "empty-template-\(Int(canvasSize.width))x\(Int(canvasSize.height))",
+            name: "Empty Template",
+            canvasSize: canvasSize,
+            background: .solid(CanvasColor(hex: "122034")),
+            nodes: []
         )
     }
 

@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum CanvasSchemaVersion {
-    public static let current = 3
+    public static let current = 4
 }
 
 public struct CanvasSize: Codable, Hashable, Sendable {
@@ -222,6 +222,83 @@ public enum CanvasAssetKind: String, Codable, Sendable {
     case symbol
     case remoteURL
     case inlineImage
+}
+
+public enum CanvasFilterPreset: String, Codable, CaseIterable, Sendable {
+    case normal
+    case autoFix
+    case vibrant
+    case punch
+    case soft
+    case matte
+    case warm
+    case cool
+    case brightness
+    case contrast
+    case saturation
+    case mono
+    case noir
+    case sepia
+    case fade
+    case chrome
+    case instant
+    case transfer
+    case bloom
+    case sharpen
+    case vignette
+}
+
+public extension CanvasFilterPreset {
+    var displayTitle: String {
+        switch self {
+        case .normal:
+            return "Normal"
+        case .autoFix:
+            return "Auto Fix"
+        case .vibrant:
+            return "Vibrant"
+        case .punch:
+            return "Punch"
+        case .soft:
+            return "Soft"
+        case .matte:
+            return "Matte"
+        case .warm:
+            return "Warm"
+        case .cool:
+            return "Cool"
+        case .brightness:
+            return "Brightness"
+        case .contrast:
+            return "Contrast"
+        case .saturation:
+            return "Saturation"
+        case .mono:
+            return "Mono"
+        case .noir:
+            return "Noir"
+        case .sepia:
+            return "Sepia"
+        case .fade:
+            return "Fade"
+        case .chrome:
+            return "Chrome"
+        case .instant:
+            return "Instant"
+        case .transfer:
+            return "Transfer"
+        case .bloom:
+            return "Bloom"
+        case .sharpen:
+            return "Sharpen"
+        case .vignette:
+            return "Vignette"
+        }
+    }
+
+    var usesImageFiltering: Bool {
+        self != .normal
+    }
 }
 
 public struct CanvasAssetSource: Codable, Hashable, Sendable {
@@ -533,6 +610,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
     public var background: CanvasBackground
     public var nodes: [CanvasNode]
     public var eraserStrokes: [CanvasEraserStroke]
+    public var canvasFilter: CanvasFilterPreset
     public var metadata: CanvasProjectMetadata
 
     private enum CodingKeys: String, CodingKey {
@@ -542,6 +620,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
         case background
         case nodes
         case eraserStrokes
+        case canvasFilter
         case metadata
     }
 
@@ -552,6 +631,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
         background: CanvasBackground,
         nodes: [CanvasNode],
         eraserStrokes: [CanvasEraserStroke] = [],
+        canvasFilter: CanvasFilterPreset = .normal,
         metadata: CanvasProjectMetadata = CanvasProjectMetadata()
     ) {
         self.version = version
@@ -560,6 +640,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
         self.background = background
         self.nodes = nodes
         self.eraserStrokes = eraserStrokes
+        self.canvasFilter = canvasFilter
         self.metadata = metadata
     }
 
@@ -571,6 +652,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
         background = try container.decode(CanvasBackground.self, forKey: .background)
         nodes = try container.decode([CanvasNode].self, forKey: .nodes)
         eraserStrokes = try container.decodeIfPresent([CanvasEraserStroke].self, forKey: .eraserStrokes) ?? []
+        canvasFilter = try container.decodeIfPresent(CanvasFilterPreset.self, forKey: .canvasFilter) ?? .normal
         metadata = try container.decodeIfPresent(CanvasProjectMetadata.self, forKey: .metadata) ?? CanvasProjectMetadata()
     }
 
@@ -582,6 +664,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
         try container.encode(background, forKey: .background)
         try container.encode(nodes, forKey: .nodes)
         try container.encode(eraserStrokes, forKey: .eraserStrokes)
+        try container.encode(canvasFilter, forKey: .canvasFilter)
         try container.encode(metadata, forKey: .metadata)
     }
 
@@ -594,6 +677,7 @@ public struct CanvasProject: Codable, Hashable, Sendable {
             background: template.background,
             nodes: template.nodes.sorted(by: { $0.zIndex < $1.zIndex }),
             eraserStrokes: [],
+            canvasFilter: .normal,
             metadata: CanvasProjectMetadata(createdAt: now, modifiedAt: now)
         )
     }
@@ -622,12 +706,26 @@ public struct CanvasStickerDescriptor: Hashable, Identifiable, Sendable {
     }
 }
 
+public struct CanvasSignatureDescriptor: Codable, Hashable, Identifiable, Sendable {
+    public var id: String
+    public var name: String
+    public var source: CanvasAssetSource
+
+    public init(id: String, name: String, source: CanvasAssetSource) {
+        self.id = id
+        self.name = name
+        self.source = source
+    }
+}
+
 public enum CanvasEditorTool: String, Codable, CaseIterable, Sendable {
     case addBrush
     case addText
     case addEmoji
     case addSticker
     case addImage
+    case filter
+    case addSignature
     case addRemoteImage
     case duplicate
     case delete

@@ -57,6 +57,108 @@ private final class CanvasOverlayPassthroughView: UIView {
     }
 }
 
+private enum CanvasTransparencyGridStyle {
+    static let cellSize: CGFloat = 8
+    static let lightColor = UIColor(white: 1, alpha: 1)
+    static let darkColor = UIColor(white: 0.9, alpha: 1)
+}
+
+private final class CanvasTransparencyGridView: UIView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = true
+        isUserInteractionEnabled = false
+        clipsToBounds = true
+        layer.cornerCurve = .continuous
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return
+        }
+
+        context.setFillColor(CanvasTransparencyGridStyle.lightColor.cgColor)
+        context.fill(rect)
+
+        context.setFillColor(CanvasTransparencyGridStyle.darkColor.cgColor)
+
+        let cellSize = CanvasTransparencyGridStyle.cellSize
+        let rowRange = Int(floor(rect.minY / cellSize))...Int(ceil(rect.maxY / cellSize))
+        let columnRange = Int(floor(rect.minX / cellSize))...Int(ceil(rect.maxX / cellSize))
+
+        for row in rowRange {
+            for column in columnRange where (row + column).isMultiple(of: 2) {
+                let cellRect = CGRect(
+                    x: CGFloat(column) * cellSize,
+                    y: CGFloat(row) * cellSize,
+                    width: cellSize,
+                    height: cellSize
+                )
+                context.fill(cellRect.intersection(rect))
+            }
+        }
+    }
+}
+
+private final class CanvasEraserMaskLayer: CALayer {
+    var strokes: [CanvasEraserStroke] = [] {
+        didSet {
+            setNeedsDisplay()
+        }
+    }
+
+    var previewStroke: CanvasEraserStroke? {
+        didSet {
+            setNeedsDisplay()
+        }
+    }
+
+    override init() {
+        super.init()
+        commonInit()
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+        if let layer = layer as? CanvasEraserMaskLayer {
+            strokes = layer.strokes
+            previewStroke = layer.previewStroke
+        }
+        commonInit()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(in context: CGContext) {
+        guard bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(bounds)
+
+        var renderedStrokes = strokes
+        if let previewStroke, !previewStroke.points.isEmpty {
+            renderedStrokes.append(previewStroke)
+        }
+        CanvasEraserPathBuilder.applyClearStrokes(renderedStrokes, in: context)
+    }
+
+    private func commonInit() {
+        contentsScale = 1
+        needsDisplayOnBoundsChange = true
+    }
+}
+
 @MainActor
 protocol CanvasStageViewDelegate: AnyObject {
     func canvasStageViewDidTapSelectedTextNode(_ stageView: CanvasStageView)
@@ -79,10 +181,12 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
     let assetLoader = CanvasAssetLoader(resources: CanvasEditorUIRuntime.currentConfiguration.resources)
 
+    private let transparencyGridView = CanvasTransparencyGridView()
     private let canvasContainerView = UIView()
     private let contentContainerView = UIView()
     private let backgroundColorView = UIView()
     private let backgroundImageView = UIImageView()
+    private let filteredPreviewImageView = UIImageView()
     private let overlayControlContainerView = CanvasOverlayPassthroughView()
     private let lowerNodeContainerView = UIView()
     private let selectedNodeHostView = UIView()
@@ -108,7 +212,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         tintColor: CanvasEditorTheme.overlayHandleTint
     )
     private let drawingPreviewLayer = CAShapeLayer()
-    private let eraserMaskLayer = CALayer()
+    private let eraserMaskLayer = CanvasEraserMaskLayer()
 
     private lazy var tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
     private lazy var doubleTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
@@ -121,6 +225,8 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private var selectionObserverID: UUID?
     private var nodeViews: [String: CanvasNodeView] = [:]
     private var pendingProject: CanvasProject?
+    private var filteredPreviewRenderToken = UUID()
+    private var previewCanvasFilterOverride: CanvasFilterPreset?
 
     private var canvasSize: CGSize = .zero
     private var canvasScale: CGFloat = 1
@@ -169,6 +275,10 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         backgroundImageView.contentMode = .scaleAspectFill
         backgroundImageView.clipsToBounds = true
+        filteredPreviewImageView.contentMode = .scaleToFill
+        filteredPreviewImageView.clipsToBounds = true
+        filteredPreviewImageView.isUserInteractionEnabled = false
+        filteredPreviewImageView.isHidden = true
 
         lowerNodeContainerView.clipsToBounds = true
         selectedNodeHostView.clipsToBounds = false
@@ -197,9 +307,9 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         drawingPreviewLayer.lineJoin = .round
         drawingPreviewLayer.isHidden = true
         drawingPreviewView.layer.addSublayer(drawingPreviewLayer)
-        eraserMaskLayer.contentsGravity = .resize
         contentContainerView.layer.mask = eraserMaskLayer
 
+        addSubview(transparencyGridView)
         addSubview(canvasContainerView)
         addSubview(overlayControlContainerView)
         canvasContainerView.addSubview(contentContainerView)
@@ -208,6 +318,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.addSubview(lowerNodeContainerView)
         contentContainerView.addSubview(selectedNodeHostView)
         contentContainerView.addSubview(upperNodeContainerView)
+        canvasContainerView.addSubview(filteredPreviewImageView)
         canvasContainerView.addSubview(drawingPreviewView)
         canvasContainerView.addSubview(selectionOverlay)
         canvasContainerView.addSubview(inlineTextView)
@@ -315,10 +426,19 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         delegate?.canvasStageViewDidBeginInlineEditing(self)
         syncNodePresentation()
         updateInlineTextEditor(forceTextRefresh: true)
+        refreshFilteredPreviewIfNeeded()
 
         let targetOffset = placeCursorAtEnd ? (inlineTextView.text as NSString).length : 0
         inlineTextView.selectedRange = NSRange(location: targetOffset, length: 0)
         inlineTextView.becomeFirstResponder()
+    }
+
+    func setPreviewCanvasFilter(_ filter: CanvasFilterPreset?) {
+        guard previewCanvasFilterOverride != filter else {
+            return
+        }
+        previewCanvasFilterOverride = filter
+        refreshFilteredPreviewIfNeeded()
     }
 
     func beginDrawing(with configuration: CanvasBrushConfiguration) {
@@ -338,15 +458,12 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         endInlineEditing()
         toolMode = .erasing(strokeWidth: strokeWidth)
         resetCurrentToolStrokePreview()
-        drawingPreviewLayer.strokeColor = UIColor.white.withAlphaComponent(0.92).cgColor
-        drawingPreviewLayer.lineWidth = strokeWidth
-        drawingPreviewView.isHidden = false
-        drawingPreviewLayer.isHidden = false
+        drawingPreviewView.isHidden = true
+        drawingPreviewLayer.isHidden = true
         setNodeGesturesEnabled(false)
         drawingPanGestureRecognizer.isEnabled = true
         selectionOverlay.isHidden = true
         [deleteHandle, widthHandle, heightHandle, transformHandle].forEach { $0.isHidden = true }
-        canvasContainerView.bringSubviewToFront(drawingPreviewView)
     }
 
     func cancelDrawingMode() {
@@ -751,6 +868,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         toolStartPoint = nil
         drawingPreviewLayer.path = nil
         drawingPreviewLayer.isHidden = true
+        updateEraserMask()
     }
 
     private func clampedCanvasPoint(_ point: CGPoint) -> CGPoint {
@@ -777,21 +895,26 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         guard let toolMode else {
             drawingPreviewLayer.path = nil
             drawingPreviewLayer.isHidden = true
+            updateEraserMask()
             return
         }
 
         switch toolMode {
         case .drawing(let configuration):
+            drawingPreviewView.isHidden = false
             drawingPreviewLayer.path = CanvasShapePathBuilder.makePath(
                 type: configuration.type,
                 points: toolPoints
             ).cgPath
             drawingPreviewLayer.strokeColor = configuration.color.uiColor.withAlphaComponent(configuration.opacity).cgColor
             drawingPreviewLayer.lineWidth = configuration.strokeWidth
+            updateEraserMask()
         case .erasing(let strokeWidth):
-            drawingPreviewLayer.path = CanvasEraserPathBuilder.makePath(points: toolPoints)
-            drawingPreviewLayer.strokeColor = UIColor.white.withAlphaComponent(0.92).cgColor
-            drawingPreviewLayer.lineWidth = strokeWidth
+            drawingPreviewLayer.path = nil
+            drawingPreviewLayer.isHidden = true
+            drawingPreviewView.isHidden = true
+            updateEraserMask(previewStroke: currentEraserStroke(strokeWidth: strokeWidth))
+            return
         }
 
         drawingPreviewLayer.isHidden = toolPoints.isEmpty
@@ -836,26 +959,31 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         )
     }
 
-    private func updateEraserMask(strokes: [CanvasEraserStroke]? = nil) {
-        let currentStrokes = strokes ?? store?.project.eraserStrokes ?? []
+    private func updateEraserMask(
+        strokes: [CanvasEraserStroke]? = nil,
+        previewStroke: CanvasEraserStroke? = nil
+    ) {
+        let resolvedPreviewStroke = previewStroke ?? {
+            guard case .erasing(let strokeWidth) = toolMode else {
+                return nil
+            }
+            return currentEraserStroke(strokeWidth: strokeWidth)
+        }()
+
         guard canvasSize.width > 0, canvasSize.height > 0 else {
-            eraserMaskLayer.contents = nil
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            eraserMaskLayer.strokes = []
+            eraserMaskLayer.previewStroke = nil
+            CATransaction.commit()
             return
         }
 
-        let canvasRect = CGRect(origin: .zero, size: canvasSize)
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        format.opaque = false
-
-        let maskImage = UIGraphicsImageRenderer(size: canvasSize, format: format).image { rendererContext in
-            UIColor.white.setFill()
-            UIRectFill(canvasRect)
-            CanvasEraserPathBuilder.applyClearStrokes(currentStrokes, in: rendererContext.cgContext)
-        }
-
-        eraserMaskLayer.contentsScale = maskImage.scale
-        eraserMaskLayer.contents = maskImage.cgImage
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        eraserMaskLayer.strokes = strokes ?? store?.project.eraserStrokes ?? []
+        eraserMaskLayer.previewStroke = resolvedPreviewStroke
+        CATransaction.commit()
     }
 
     private func applyProject(_ project: CanvasProject) {
@@ -879,6 +1007,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         }
 
         syncNodePresentation()
+        canvasContainerView.bringSubviewToFront(filteredPreviewImageView)
         canvasContainerView.bringSubviewToFront(drawingPreviewView)
         canvasContainerView.bringSubviewToFront(selectionOverlay)
         canvasContainerView.bringSubviewToFront(inlineTextView)
@@ -895,6 +1024,10 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         canvasContainerView.bounds = CGRect(origin: .zero, size: canvasSize)
         canvasContainerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
         canvasContainerView.transform = CGAffineTransform(scaleX: canvasScale, y: canvasScale)
+        transparencyGridView.frame = layout.canvasFrame
+        transparencyGridView.layer.cornerRadius = contentContainerView.layer.cornerRadius * canvasScale
+        transparencyGridView.isHidden = layout.canvasFrame.isEmpty
+        transparencyGridView.setNeedsDisplay()
         overlayControlContainerView.frame = bounds
         canvasContainerView.layer.shadowPath = UIBezierPath(
             roundedRect: CGRect(origin: .zero, size: canvasSize),
@@ -904,12 +1037,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.frame = CGRect(origin: .zero, size: canvasSize)
         backgroundColorView.frame = contentContainerView.bounds
         backgroundImageView.frame = contentContainerView.bounds
+        filteredPreviewImageView.frame = contentContainerView.frame
+        filteredPreviewImageView.layer.cornerRadius = contentContainerView.layer.cornerRadius
+        filteredPreviewImageView.layer.cornerCurve = .continuous
         [lowerNodeContainerView, selectedNodeHostView, upperNodeContainerView, drawingPreviewView].forEach {
             $0.frame = CGRect(origin: .zero, size: canvasSize)
         }
         drawingPreviewLayer.frame = drawingPreviewView.bounds
         eraserMaskLayer.frame = contentContainerView.bounds
         updateEraserMask()
+        refreshFilteredPreviewIfNeeded()
 
         updateOverlayHandleMetrics()
         updateSelectionOverlay()
@@ -1131,7 +1268,55 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         activeEditingStyle = nil
         inlineTextView.isHidden = true
         syncNodePresentation()
+        refreshFilteredPreviewIfNeeded()
         delegate?.canvasStageViewDidEndInlineEditing(self)
+    }
+
+    private var effectiveCanvasFilter: CanvasFilterPreset {
+        previewCanvasFilterOverride ?? store?.project.canvasFilter ?? .normal
+    }
+
+    private func refreshFilteredPreviewIfNeeded() {
+        let activeFilter = effectiveCanvasFilter
+        guard activeFilter.usesImageFiltering,
+              let store,
+              canvasSize.width > 0,
+              canvasSize.height > 0 else {
+            resetFilteredPreview()
+            return
+        }
+
+        let project = store.project
+        let excludedNodeIDs = editingNodeID.map { Set([$0]) } ?? []
+        let renderScale = max(min(UIScreen.main.scale * canvasScale, UIScreen.main.scale), 0.25)
+        let renderToken = UUID()
+        filteredPreviewRenderToken = renderToken
+
+        DispatchQueue.global(qos: .userInitiated).async { [assetLoader] in
+            let baseImage = CanvasEditorRenderer.renderBaseImage(
+                project: project,
+                assetLoader: assetLoader,
+                excludingNodeIDs: excludedNodeIDs,
+                imageScale: renderScale
+            )
+            let filteredImage = CanvasEditorRenderer.applyFilter(activeFilter, to: baseImage)
+
+            Task { @MainActor [weak self] in
+                guard let self, self.filteredPreviewRenderToken == renderToken else {
+                    return
+                }
+                self.filteredPreviewImageView.image = filteredImage
+                self.filteredPreviewImageView.isHidden = false
+                self.contentContainerView.alpha = 0
+            }
+        }
+    }
+
+    private func resetFilteredPreview() {
+        filteredPreviewRenderToken = UUID()
+        filteredPreviewImageView.image = nil
+        filteredPreviewImageView.isHidden = true
+        contentContainerView.alpha = 1
     }
 
     private func hitTestNode(at point: CGPoint) -> CanvasNode? {

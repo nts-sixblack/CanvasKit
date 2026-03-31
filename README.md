@@ -16,6 +16,7 @@ The package is built so host apps can theme and configure editor chrome at runti
 - text labels
 - tool availability
 - sticker catalog
+- provider-backed signature library
 - bundled or host-provided assets
 - bundled or host-provided template JSON
 
@@ -186,6 +187,7 @@ configuration.icons = CanvasEditorIconSet(
     addTextTool: "character.textbox",
     addEmojiTool: "face.smiling.inverse",
     addStickerTool: "seal.fill",
+    addSignatureTool: "signature",
     colorPickerFilled: "paintpalette.fill"
 )
 
@@ -195,10 +197,37 @@ configuration.strings = CanvasEditorStrings(
     textInspectorTitle: "Typography",
     layerPanelTitle: "Stack"
 )
+
+@MainActor
+final class SharedSignatureStore: CanvasSignatureStore {
+    private var signatures: [CanvasSignatureDescriptor] = []
+
+    func loadSignatures() async throws -> [CanvasSignatureDescriptor] {
+        signatures
+    }
+
+    func saveSignature(_ signature: CanvasSignatureDescriptor) async throws -> CanvasSignatureDescriptor {
+        signatures.insert(signature, at: 0)
+        return signature
+    }
+
+    func deleteSignature(id: String) async throws {
+        signatures.removeAll { $0.id == id }
+    }
+}
+
+let signatureStore = SharedSignatureStore()
+configuration.signatures = CanvasSignatureConfiguration(
+    store: signatureStore,
+    defaultColor: .black,
+    defaultLineWidth: 4
+)
+configuration.features.enabledTools.append(.addSignature)
 ```
 
 `configuration.templates` controls bundled and external template sources.
 `configuration.resources` controls which bundles are used for assets, fonts, and templates.
+`configuration.signatures` controls the shared signature library used by the signature tool. The tool is only shown when `.addSignature` is enabled and a signature store is configured.
 
 ## Included Resources
 

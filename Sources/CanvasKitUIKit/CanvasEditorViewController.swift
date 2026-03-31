@@ -17,6 +17,8 @@ private enum CanvasEditorLoadingState {
     case none
     case importingImage
     case exportingImage
+    case loadingSignatures
+    case savingSignature
 
     var message: String {
         let strings = CanvasEditorUIRuntime.currentConfiguration.strings
@@ -27,6 +29,10 @@ private enum CanvasEditorLoadingState {
             return strings.importingImageMessage
         case .exportingImage:
             return strings.exportingImageMessage
+        case .loadingSignatures:
+            return strings.loadingSignaturesMessage
+        case .savingSignature:
+            return strings.savingSignatureMessage
         }
     }
 }
@@ -51,6 +57,13 @@ private enum VisibleInspectorKind {
     case text
     case brush
     case eraser
+}
+
+private struct ToolbarToolDescriptor {
+    let tool: CanvasEditorTool
+    let button: UIButton
+    let action: Selector
+    let requiresSignatureStore: Bool
 }
 
 @MainActor
@@ -108,6 +121,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var eraserStrokeWidth: Double = 24
     private var isBrushModeEnabled = false
     private var isEraserModeEnabled = false
+    private var filterDraftPreset: CanvasFilterPreset?
 
     private var projectObserverID: UUID?
     private var selectionObserverID: UUID?
@@ -127,6 +141,14 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private lazy var addPhotoButton = makeGridToolButton(
         title: strings.addPhotoToolTitle,
         systemImage: icons.addPhotoTool
+    )
+    private lazy var filterButton = makeGridToolButton(
+        title: strings.filterToolTitle,
+        systemImage: icons.filterTool
+    )
+    private lazy var addSignatureButton = makeGridToolButton(
+        title: strings.addSignatureToolTitle,
+        systemImage: icons.addSignatureTool
     )
     private lazy var eraserButton = makeGridToolButton(
         title: strings.eraserToolTitle,
@@ -171,6 +193,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             action: #selector(exportTapped)
         )
     }()
+
+    private var signatureStore: CanvasSignatureStore? {
+        store.configuration.signatures.store
+    }
 
     public init(input: CanvasEditorInput, configuration: CanvasEditorConfiguration = .default) {
         let resolvedStore: CanvasEditorStore
@@ -376,20 +402,14 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func setupToolbar() {
-        let gridButtons: [(UIButton, CanvasEditorTool, Selector)] = [
-            (addTextButton, .addText, #selector(addTextTapped)),
-            (addEmojiButton, .addEmoji, #selector(addEmojiTapped)),
-            (addStickerButton, .addSticker, #selector(addStickerTapped)),
-            (addPhotoButton, .addImage, #selector(addPhotoTapped)),
-            (eraserButton, .delete, #selector(eraserTapped)),
-            (addBrushButton, .addBrush, #selector(addBrushTapped)),
-            (duplicateButton, .duplicate, #selector(duplicateTapped)),
-            (deleteButton, .delete, #selector(deleteTapped))
-        ]
+        let visibleToolDescriptors = toolbarToolDescriptors().filter { descriptor in
+            store.configuration.enabledTools.contains(descriptor.tool)
+                && (!descriptor.requiresSignatureStore || signatureStore != nil)
+                && (descriptor.tool != .filter || CanvasFilterProcessor.isAvailable)
+        }
 
-        gridButtons.forEach { button, tool, action in
-            button.addTarget(self, action: action, for: .touchUpInside)
-            button.isHidden = !store.configuration.enabledTools.contains(tool)
+        visibleToolDescriptors.forEach { descriptor in
+            descriptor.button.addTarget(self, action: descriptor.action, for: .touchUpInside)
         }
 
         let historyButtons: [(UIButton, Selector)] = [
@@ -406,18 +426,9 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         exportBarButtonItem.isEnabled = store.configuration.enabledTools.contains(.export)
         layersButton.addTarget(self, action: #selector(layersTapped), for: .touchUpInside)
 
-        toolbarGridStack.addArrangedSubview(makeToolbarRow([
-            addTextButton,
-            addEmojiButton,
-            addStickerButton,
-            addPhotoButton
-        ]))
-        toolbarGridStack.addArrangedSubview(makeToolbarRow([
-            eraserButton,
-            duplicateButton,
-            deleteButton,
-            addBrushButton
-        ]))
+        toolbarRows(from: visibleToolDescriptors.map(\.button)).forEach { buttons in
+            toolbarGridStack.addArrangedSubview(makeToolbarRow(buttons))
+        }
     }
 
     private func bindStore() {
@@ -545,7 +556,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         historyActionsContainer.isUserInteractionEnabled = !isBusy
         inspectorContainerView.isUserInteractionEnabled = !isBusy
         navigationItem.leftBarButtonItem?.isEnabled = !isBusy
-        exportBarButtonItem.isEnabled = !isBusy
+        exportBarButtonItem.isEnabled = !isBusy && store.configuration.enabledTools.contains(.export)
         layersButton.isEnabled = !isBusy
         layerPanelView.isUserInteractionEnabled = !isBusy && isLayerPanelVisible
 
@@ -558,6 +569,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             loadingOverlayView.show(message: state.message, animated: animated)
         } else {
             loadingOverlayView.hide(animated: animated)
+            refreshChrome()
         }
     }
 
@@ -682,6 +694,42 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         rowStack.alignment = .fill
         rowStack.distribution = .fillEqually
         return rowStack
+    }
+
+    private func toolbarRows(from buttons: [UIButton]) -> [[UIView]] {
+        guard !buttons.isEmpty else {
+            return []
+        }
+
+        var rows: [[UIView]] = []
+        var index = 0
+
+        while index < buttons.count {
+            let endIndex = min(index + 4, buttons.count)
+            var row: [UIView] = Array(buttons[index..<endIndex])
+            while row.count < 4 {
+                row.append(makeToolbarSpacerView())
+            }
+            rows.append(row)
+            index = endIndex
+        }
+
+        return rows
+    }
+
+    private func toolbarToolDescriptors() -> [ToolbarToolDescriptor] {
+        [
+            ToolbarToolDescriptor(tool: .addText, button: addTextButton, action: #selector(addTextTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .addEmoji, button: addEmojiButton, action: #selector(addEmojiTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .addSticker, button: addStickerButton, action: #selector(addStickerTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .addImage, button: addPhotoButton, action: #selector(addPhotoTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .filter, button: filterButton, action: #selector(filterTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .addSignature, button: addSignatureButton, action: #selector(addSignatureTapped), requiresSignatureStore: true),
+            ToolbarToolDescriptor(tool: .addBrush, button: eraserButton, action: #selector(eraserTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .duplicate, button: duplicateButton, action: #selector(duplicateTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .delete, button: deleteButton, action: #selector(deleteTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .addBrush, button: addBrushButton, action: #selector(addBrushTapped), requiresSignatureStore: false)
+        ]
     }
 
     private func makeToolbarSpacerView() -> UIView {
@@ -960,6 +1008,128 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             self.store.addStickerNodes(sources: selectedSources)
         }
         presentInsertPicker(picker)
+    }
+
+    private func presentFilterPicker() {
+        let project = store.project
+        let maxThumbnailDimension: CGFloat = 140
+        let canvasMaxDimension = max(CGFloat(project.canvasSize.width), CGFloat(project.canvasSize.height))
+        let previewScale = max(min(maxThumbnailDimension / canvasMaxDimension, 1), 0.05)
+        let basePreviewImage = CanvasEditorRenderer.renderBaseImage(
+            project: project,
+            assetLoader: stageView.assetLoader,
+            imageScale: previewScale
+        )
+
+        let currentFilter = project.canvasFilter
+        filterDraftPreset = currentFilter
+        stageView.setPreviewCanvasFilter(currentFilter)
+
+        let picker = CanvasFilterPickerSheetViewController(
+            selectedPreset: currentFilter,
+            basePreviewImage: basePreviewImage,
+            onSelectionChanged: { [weak self] preset in
+                guard let self else {
+                    return
+                }
+                self.filterDraftPreset = preset
+                self.stageView.setPreviewCanvasFilter(preset)
+            },
+            onCancel: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.filterDraftPreset = nil
+                self.stageView.setPreviewCanvasFilter(nil)
+            },
+            onDone: { [weak self] preset in
+                guard let self else {
+                    return
+                }
+                self.store.updateCanvasFilter(preset)
+                self.filterDraftPreset = nil
+                self.stageView.setPreviewCanvasFilter(nil)
+            }
+        )
+        picker.modalPresentationStyle = .overFullScreen
+        present(picker, animated: false)
+    }
+
+    private func loadSignaturesAndPresentFlow() {
+        guard let signatureStore else {
+            return
+        }
+
+        setLoadingState(.loadingSignatures)
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let signatures = try await signatureStore.loadSignatures()
+                self.setLoadingState(.none)
+
+                if signatures.isEmpty {
+                    self.presentSignatureEditor(returnToPickerOnCancel: false)
+                } else {
+                    self.presentSignaturePicker(signatures: signatures)
+                }
+            } catch {
+                self.setLoadingState(.none)
+                self.presentErrorAlert(message: self.strings.loadSignaturesFailureMessage)
+            }
+        }
+    }
+
+    private func presentSignaturePicker(signatures: [CanvasSignatureDescriptor]) {
+        guard let signatureStore else {
+            return
+        }
+
+        let picker = CanvasSignaturePickerSheetViewController(
+            signatures: signatures,
+            signatureStore: signatureStore,
+            assetLoader: stageView.assetLoader,
+            onRequestNew: { [weak self] in
+                self?.presentSignatureEditor(returnToPickerOnCancel: true)
+            },
+            onAdd: { [weak self] signature in
+                self?.insertSignature(signature)
+            }
+        )
+        picker.modalPresentationStyle = .overFullScreen
+        present(picker, animated: false)
+    }
+
+    private func presentSignatureEditor(returnToPickerOnCancel: Bool) {
+        guard let signatureStore else {
+            return
+        }
+
+        let editor = CanvasSignatureEditorViewController(
+            signatureConfiguration: store.configuration.signatures,
+            fallbackPalette: store.configuration.colorPalette,
+            allowsColorPicker: store.configuration.features.allowsColorPicker,
+            assetLoader: stageView.assetLoader,
+            signatureStore: signatureStore,
+            onCancel: { [weak self] in
+                guard let self, returnToPickerOnCancel else {
+                    return
+                }
+                self.loadSignaturesAndPresentFlow()
+            },
+            onSave: { [weak self] signature in
+                self?.insertSignature(signature)
+            }
+        )
+        editor.modalPresentationStyle = .fullScreen
+        present(editor, animated: true)
+    }
+
+    private func insertSignature(_ signature: CanvasSignatureDescriptor) {
+        let intrinsicSize = stageView.assetLoader
+            .imageSynchronously(for: signature.source)
+            .map { CanvasSize($0.size) }
+        store.addImageNode(source: signature.source, intrinsicSize: intrinsicSize)
     }
 
     private func presentInsertPicker(_ picker: UIViewController) {
@@ -1319,6 +1489,18 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = self
         present(picker, animated: true)
+    }
+
+    @objc
+    private func filterTapped() {
+        dismissEditingOverlays(animated: true)
+        presentFilterPicker()
+    }
+
+    @objc
+    private func addSignatureTapped() {
+        dismissEditingOverlays(animated: true)
+        loadSignaturesAndPresentFlow()
     }
 
     @objc

@@ -130,15 +130,16 @@ public final class CanvasEditorStore {
     }
 
     public func addTextNode(text: String = "") {
+        let defaultTextLayout = defaultTextNodeLayout()
         addNode(
             CanvasNode(
                 kind: .text,
                 name: "Text",
                 transform: CanvasTransform(position: defaultNodePosition()),
-                size: CanvasSize(width: 260, height: 140),
+                size: defaultTextLayout.size,
                 zIndex: nextZIndex(),
                 text: text,
-                style: .defaultText
+                style: defaultTextLayout.style
             )
         )
     }
@@ -262,6 +263,16 @@ public final class CanvasEditorStore {
     public func updateSelectedSource(_ source: CanvasAssetSource) {
         updateSelectedNode { node in
             node.source = source
+        }
+    }
+
+    public func updateCanvasFilter(_ filter: CanvasFilterPreset) {
+        _ = commitMutation { project in
+            guard project.canvasFilter != filter else {
+                return false
+            }
+            project.canvasFilter = filter
+            return true
         }
     }
 
@@ -554,6 +565,30 @@ public final class CanvasEditorStore {
         default:
             return .defaultText
         }
+    }
+
+    private func defaultTextNodeLayout() -> (size: CanvasSize, style: CanvasTextStyle) {
+        let referenceShortSide = 1080.0
+        let scale = min(project.canvasSize.width, project.canvasSize.height) / referenceShortSide
+
+        let width = max((320 * scale).rounded(), 220)
+        let height = max((168 * scale).rounded(), 112)
+        let fontSize = max((54 * scale).rounded(), 30)
+        let shadowRadius = max((14 * scale).rounded(), 8)
+        let shadowOffsetY = max((10 * scale).rounded(), 6)
+
+        var style = CanvasTextStyle.defaultText
+        style.fontSize = fontSize
+        if var shadow = style.shadow {
+            shadow.radius = shadowRadius
+            shadow.offsetY = shadowOffsetY
+            style.shadow = shadow
+        }
+
+        return (
+            size: CanvasSize(width: width, height: height),
+            style: style
+        )
     }
 
     private func defaultImageNodeSize(for intrinsicSize: CanvasSize?) -> CanvasSize {

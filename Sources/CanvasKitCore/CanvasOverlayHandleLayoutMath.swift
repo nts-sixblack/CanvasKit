@@ -15,9 +15,20 @@ package struct CanvasOverlayHandleMetrics: Equatable, Sendable {
 
 package enum CanvasOverlayHandleLayoutMath {
     private static let referenceDisplayedCanvasShortSide: CGFloat = 390
-    private static let minimumHandleSize: CGFloat = 44
-    private static let maximumHandleSize: CGFloat = 64
-    private static let symbolPointSizeRatio: CGFloat = 0.55
+    private static let minimumHandleSize: CGFloat = 36
+    private static let maximumHandleSize: CGFloat = 52
+    private static let symbolPointSizeRatio: CGFloat = 0.44
+
+    package static func defaultMetrics(layout: CanvasEditorLayout) -> CanvasOverlayHandleMetrics {
+        let baseHandleSize = CGFloat(layout.overlayHandleSize)
+        let cornerRadiusRatio = baseHandleSize > 0
+            ? CGFloat(layout.overlayHandleCornerRadius) / baseHandleSize
+            : 0.5
+        return makeMetrics(
+            handleSize: baseHandleSize,
+            cornerRadiusRatio: cornerRadiusRatio
+        )
+    }
 
     package static func resolvedMetrics(
         layout: CanvasEditorLayout,
@@ -32,10 +43,9 @@ package enum CanvasOverlayHandleLayoutMath {
             ? CGFloat(layout.overlayHandleCornerRadius) / baseHandleSize
             : 0.5
 
-        return CanvasOverlayHandleMetrics(
+        return makeMetrics(
             handleSize: resolvedHandleSize,
-            cornerRadius: resolvedHandleSize * cornerRadiusRatio,
-            symbolPointSize: resolvedHandleSize * symbolPointSizeRatio
+            cornerRadiusRatio: cornerRadiusRatio
         )
     }
 
@@ -46,5 +56,16 @@ package enum CanvasOverlayHandleLayoutMath {
         let safeDisplayedShortSide = max(displayedCanvasShortSide, 0)
         let scaledHandleSize = baseHandleSize * safeDisplayedShortSide / referenceDisplayedCanvasShortSide
         return min(max(scaledHandleSize, minimumHandleSize), maximumHandleSize)
+    }
+
+    private static func makeMetrics(
+        handleSize: CGFloat,
+        cornerRadiusRatio: CGFloat
+    ) -> CanvasOverlayHandleMetrics {
+        CanvasOverlayHandleMetrics(
+            handleSize: handleSize,
+            cornerRadius: handleSize * cornerRadiusRatio,
+            symbolPointSize: handleSize * symbolPointSizeRatio
+        )
     }
 }
