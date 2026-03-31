@@ -121,6 +121,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var eraserStrokeWidth: Double = 24
     private var isBrushModeEnabled = false
     private var isEraserModeEnabled = false
+    private var filterDraftPreset: CanvasFilterPreset?
 
     private var projectObserverID: UUID?
     private var selectionObserverID: UUID?
@@ -140,6 +141,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private lazy var addPhotoButton = makeGridToolButton(
         title: strings.addPhotoToolTitle,
         systemImage: icons.addPhotoTool
+    )
+    private lazy var filterButton = makeGridToolButton(
+        title: strings.filterToolTitle,
+        systemImage: icons.filterTool
     )
     private lazy var addSignatureButton = makeGridToolButton(
         title: strings.addSignatureToolTitle,
@@ -400,6 +405,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         let visibleToolDescriptors = toolbarToolDescriptors().filter { descriptor in
             store.configuration.enabledTools.contains(descriptor.tool)
                 && (!descriptor.requiresSignatureStore || signatureStore != nil)
+                && (descriptor.tool != .filter || CanvasFilterProcessor.isAvailable)
         }
 
         visibleToolDescriptors.forEach { descriptor in
@@ -717,6 +723,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             ToolbarToolDescriptor(tool: .addEmoji, button: addEmojiButton, action: #selector(addEmojiTapped), requiresSignatureStore: false),
             ToolbarToolDescriptor(tool: .addSticker, button: addStickerButton, action: #selector(addStickerTapped), requiresSignatureStore: false),
             ToolbarToolDescriptor(tool: .addImage, button: addPhotoButton, action: #selector(addPhotoTapped), requiresSignatureStore: false),
+            ToolbarToolDescriptor(tool: .filter, button: filterButton, action: #selector(filterTapped), requiresSignatureStore: false),
             ToolbarToolDescriptor(tool: .addSignature, button: addSignatureButton, action: #selector(addSignatureTapped), requiresSignatureStore: true),
             ToolbarToolDescriptor(tool: .addBrush, button: eraserButton, action: #selector(eraserTapped), requiresSignatureStore: false),
             ToolbarToolDescriptor(tool: .duplicate, button: duplicateButton, action: #selector(duplicateTapped), requiresSignatureStore: false),
@@ -1001,6 +1008,51 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             self.store.addStickerNodes(sources: selectedSources)
         }
         presentInsertPicker(picker)
+    }
+
+    private func presentFilterPicker() {
+        let project = store.project
+        let maxThumbnailDimension: CGFloat = 140
+        let canvasMaxDimension = max(CGFloat(project.canvasSize.width), CGFloat(project.canvasSize.height))
+        let previewScale = max(min(maxThumbnailDimension / canvasMaxDimension, 1), 0.05)
+        let basePreviewImage = CanvasEditorRenderer.renderBaseImage(
+            project: project,
+            assetLoader: stageView.assetLoader,
+            imageScale: previewScale
+        )
+
+        let currentFilter = project.canvasFilter
+        filterDraftPreset = currentFilter
+        stageView.setPreviewCanvasFilter(currentFilter)
+
+        let picker = CanvasFilterPickerSheetViewController(
+            selectedPreset: currentFilter,
+            basePreviewImage: basePreviewImage,
+            onSelectionChanged: { [weak self] preset in
+                guard let self else {
+                    return
+                }
+                self.filterDraftPreset = preset
+                self.stageView.setPreviewCanvasFilter(preset)
+            },
+            onCancel: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.filterDraftPreset = nil
+                self.stageView.setPreviewCanvasFilter(nil)
+            },
+            onDone: { [weak self] preset in
+                guard let self else {
+                    return
+                }
+                self.store.updateCanvasFilter(preset)
+                self.filterDraftPreset = nil
+                self.stageView.setPreviewCanvasFilter(nil)
+            }
+        )
+        picker.modalPresentationStyle = .overFullScreen
+        present(picker, animated: false)
     }
 
     private func loadSignaturesAndPresentFlow() {
@@ -1437,6 +1489,12 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = self
         present(picker, animated: true)
+    }
+
+    @objc
+    private func filterTapped() {
+        dismissEditingOverlays(animated: true)
+        presentFilterPicker()
     }
 
     @objc

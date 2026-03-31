@@ -186,6 +186,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private let contentContainerView = UIView()
     private let backgroundColorView = UIView()
     private let backgroundImageView = UIImageView()
+    private let filteredPreviewImageView = UIImageView()
     private let overlayControlContainerView = CanvasOverlayPassthroughView()
     private let lowerNodeContainerView = UIView()
     private let selectedNodeHostView = UIView()
@@ -224,6 +225,8 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private var selectionObserverID: UUID?
     private var nodeViews: [String: CanvasNodeView] = [:]
     private var pendingProject: CanvasProject?
+    private var filteredPreviewRenderToken = UUID()
+    private var previewCanvasFilterOverride: CanvasFilterPreset?
 
     private var canvasSize: CGSize = .zero
     private var canvasScale: CGFloat = 1
@@ -272,6 +275,10 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         backgroundImageView.contentMode = .scaleAspectFill
         backgroundImageView.clipsToBounds = true
+        filteredPreviewImageView.contentMode = .scaleToFill
+        filteredPreviewImageView.clipsToBounds = true
+        filteredPreviewImageView.isUserInteractionEnabled = false
+        filteredPreviewImageView.isHidden = true
 
         lowerNodeContainerView.clipsToBounds = true
         selectedNodeHostView.clipsToBounds = false
@@ -311,6 +318,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.addSubview(lowerNodeContainerView)
         contentContainerView.addSubview(selectedNodeHostView)
         contentContainerView.addSubview(upperNodeContainerView)
+        canvasContainerView.addSubview(filteredPreviewImageView)
         canvasContainerView.addSubview(drawingPreviewView)
         canvasContainerView.addSubview(selectionOverlay)
         canvasContainerView.addSubview(inlineTextView)
@@ -418,10 +426,19 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         delegate?.canvasStageViewDidBeginInlineEditing(self)
         syncNodePresentation()
         updateInlineTextEditor(forceTextRefresh: true)
+        refreshFilteredPreviewIfNeeded()
 
         let targetOffset = placeCursorAtEnd ? (inlineTextView.text as NSString).length : 0
         inlineTextView.selectedRange = NSRange(location: targetOffset, length: 0)
         inlineTextView.becomeFirstResponder()
+    }
+
+    func setPreviewCanvasFilter(_ filter: CanvasFilterPreset?) {
+        guard previewCanvasFilterOverride != filter else {
+            return
+        }
+        previewCanvasFilterOverride = filter
+        refreshFilteredPreviewIfNeeded()
     }
 
     func beginDrawing(with configuration: CanvasBrushConfiguration) {
@@ -990,6 +1007,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         }
 
         syncNodePresentation()
+        canvasContainerView.bringSubviewToFront(filteredPreviewImageView)
         canvasContainerView.bringSubviewToFront(drawingPreviewView)
         canvasContainerView.bringSubviewToFront(selectionOverlay)
         canvasContainerView.bringSubviewToFront(inlineTextView)
@@ -1019,12 +1037,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         contentContainerView.frame = CGRect(origin: .zero, size: canvasSize)
         backgroundColorView.frame = contentContainerView.bounds
         backgroundImageView.frame = contentContainerView.bounds
+        filteredPreviewImageView.frame = contentContainerView.frame
+        filteredPreviewImageView.layer.cornerRadius = contentContainerView.layer.cornerRadius
+        filteredPreviewImageView.layer.cornerCurve = .continuous
         [lowerNodeContainerView, selectedNodeHostView, upperNodeContainerView, drawingPreviewView].forEach {
             $0.frame = CGRect(origin: .zero, size: canvasSize)
         }
         drawingPreviewLayer.frame = drawingPreviewView.bounds
         eraserMaskLayer.frame = contentContainerView.bounds
         updateEraserMask()
+        refreshFilteredPreviewIfNeeded()
 
         updateOverlayHandleMetrics()
         updateSelectionOverlay()
@@ -1246,7 +1268,55 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         activeEditingStyle = nil
         inlineTextView.isHidden = true
         syncNodePresentation()
+        refreshFilteredPreviewIfNeeded()
         delegate?.canvasStageViewDidEndInlineEditing(self)
+    }
+
+    private var effectiveCanvasFilter: CanvasFilterPreset {
+        previewCanvasFilterOverride ?? store?.project.canvasFilter ?? .normal
+    }
+
+    private func refreshFilteredPreviewIfNeeded() {
+        let activeFilter = effectiveCanvasFilter
+        guard activeFilter.usesImageFiltering,
+              let store,
+              canvasSize.width > 0,
+              canvasSize.height > 0 else {
+            resetFilteredPreview()
+            return
+        }
+
+        let project = store.project
+        let excludedNodeIDs = editingNodeID.map { Set([$0]) } ?? []
+        let renderScale = max(min(UIScreen.main.scale * canvasScale, UIScreen.main.scale), 0.25)
+        let renderToken = UUID()
+        filteredPreviewRenderToken = renderToken
+
+        DispatchQueue.global(qos: .userInitiated).async { [assetLoader] in
+            let baseImage = CanvasEditorRenderer.renderBaseImage(
+                project: project,
+                assetLoader: assetLoader,
+                excludingNodeIDs: excludedNodeIDs,
+                imageScale: renderScale
+            )
+            let filteredImage = CanvasEditorRenderer.applyFilter(activeFilter, to: baseImage)
+
+            Task { @MainActor [weak self] in
+                guard let self, self.filteredPreviewRenderToken == renderToken else {
+                    return
+                }
+                self.filteredPreviewImageView.image = filteredImage
+                self.filteredPreviewImageView.isHidden = false
+                self.contentContainerView.alpha = 0
+            }
+        }
+    }
+
+    private func resetFilteredPreview() {
+        filteredPreviewRenderToken = UUID()
+        filteredPreviewImageView.image = nil
+        filteredPreviewImageView.isHidden = true
+        contentContainerView.alpha = 1
     }
 
     private func hitTestNode(at point: CGPoint) -> CanvasNode? {

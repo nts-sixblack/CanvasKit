@@ -48,6 +48,14 @@ let package = Package(
             name: "CanvasKitCoreTests",
             dependencies: ["CanvasKitCore"],
             path: "Tests/CanvasKitCoreTests"
+        ),
+        .testTarget(
+            name: "CanvasKitUIKitTests",
+            dependencies: [
+                "CanvasKitCore",
+                "CanvasKitUIKit"
+            ],
+            path: "Tests/CanvasKitUIKitTests"
         )
     ]
 )

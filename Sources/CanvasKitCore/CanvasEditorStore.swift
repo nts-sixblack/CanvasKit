@@ -266,6 +266,16 @@ public final class CanvasEditorStore {
         }
     }
 
+    public func updateCanvasFilter(_ filter: CanvasFilterPreset) {
+        _ = commitMutation { project in
+            guard project.canvasFilter != filter else {
+                return false
+            }
+            project.canvasFilter = filter
+            return true
+        }
+    }
+
     public func updateSelectedShapeStyle(
         type: CanvasShapeType,
         strokeColor: CanvasColor,

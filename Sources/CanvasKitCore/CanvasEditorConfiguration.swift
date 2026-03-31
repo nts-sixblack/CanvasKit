@@ -233,6 +233,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
     public var addEmojiTool: String
     public var addStickerTool: String
     public var addPhotoTool: String
+    public var filterTool: String
     public var addSignatureTool: String
     public var eraserTool: String
     public var brushTool: String
@@ -268,6 +269,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
         addEmojiTool: String = "face.smiling",
         addStickerTool: String = "sparkles",
         addPhotoTool: String = "photo.on.rectangle",
+        filterTool: String = "camera.filters",
         addSignatureTool: String = "signature",
         eraserTool: String = "eraser",
         brushTool: String = "paintbrush",
@@ -302,6 +304,7 @@ public struct CanvasEditorIconSet: Codable, Hashable, Sendable {
         self.addEmojiTool = addEmojiTool
         self.addStickerTool = addStickerTool
         self.addPhotoTool = addPhotoTool
+        self.filterTool = filterTool
         self.addSignatureTool = addSignatureTool
         self.eraserTool = eraserTool
         self.brushTool = brushTool
@@ -349,6 +352,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var addEmojiToolTitle: String
     public var addStickerToolTitle: String
     public var addPhotoToolTitle: String
+    public var filterToolTitle: String
     public var addSignatureToolTitle: String
     public var eraserToolTitle: String
     public var brushToolTitle: String
@@ -396,6 +400,9 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var layerShapeFallbackTitle: String
     public var imagePlaceholderTitle: String
     public var imageLoadingTitle: String
+    public var filterSheetTitle: String
+    public var filterCancelButtonTitle: String
+    public var filterDoneButtonTitle: String
     public var signatureEditorTitle: String
     public var signaturePlaceholderTitle: String
     public var signaturePlaceholderSubtitle: String
@@ -430,6 +437,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         addEmojiToolTitle: String = "Emoji",
         addStickerToolTitle: String = "Sticker",
         addPhotoToolTitle: String = "Photo",
+        filterToolTitle: String = "Filter",
         addSignatureToolTitle: String = "Signature",
         eraserToolTitle: String = "Eraser",
         brushToolTitle: String = "Brush",
@@ -477,6 +485,9 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         layerShapeFallbackTitle: String = "Shape",
         imagePlaceholderTitle: String = "Image",
         imageLoadingTitle: String = "Loading...",
+        filterSheetTitle: String = "Filters",
+        filterCancelButtonTitle: String = "Cancel",
+        filterDoneButtonTitle: String = "Done",
         signatureEditorTitle: String = "Add New Signature",
         signaturePlaceholderTitle: String = "Sign here",
         signaturePlaceholderSubtitle: String = "Please sign formally and clearly",
@@ -510,6 +521,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.addEmojiToolTitle = addEmojiToolTitle
         self.addStickerToolTitle = addStickerToolTitle
         self.addPhotoToolTitle = addPhotoToolTitle
+        self.filterToolTitle = filterToolTitle
         self.addSignatureToolTitle = addSignatureToolTitle
         self.eraserToolTitle = eraserToolTitle
         self.brushToolTitle = brushToolTitle
@@ -557,6 +569,9 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.layerShapeFallbackTitle = layerShapeFallbackTitle
         self.imagePlaceholderTitle = imagePlaceholderTitle
         self.imageLoadingTitle = imageLoadingTitle
+        self.filterSheetTitle = filterSheetTitle
+        self.filterCancelButtonTitle = filterCancelButtonTitle
+        self.filterDoneButtonTitle = filterDoneButtonTitle
         self.signatureEditorTitle = signatureEditorTitle
         self.signaturePlaceholderTitle = signaturePlaceholderTitle
         self.signaturePlaceholderSubtitle = signaturePlaceholderSubtitle
