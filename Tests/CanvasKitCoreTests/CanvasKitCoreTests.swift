@@ -453,6 +453,57 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertEqual(decoded.eraserStrokes, project.eraserStrokes)
     }
 
+    func testProjectCanvasFilterRoundTripPreservesData() throws {
+        let project = CanvasProject(
+            templateID: "filter-template",
+            canvasSize: CanvasSize(width: 1080, height: 1920),
+            background: .solid(.black),
+            nodes: [],
+            canvasFilter: .vibrant
+        )
+
+        let data = try JSONEncoder().encode(project)
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: data)
+
+        XCTAssertEqual(decoded.version, CanvasSchemaVersion.current)
+        XCTAssertEqual(decoded.canvasFilter, .vibrant)
+    }
+
+    func testLegacyProjectDecodesMissingCanvasFilterAsNormal() throws {
+        let legacyData = Data(
+            """
+            {
+              "version": 3,
+              "templateID": "legacy-template",
+              "canvasSize": { "width": 1080, "height": 1920 },
+              "background": { "kind": "solidColor", "color": { "red": 0, "green": 0, "blue": 0, "alpha": 1 } },
+              "nodes": [],
+              "eraserStrokes": [],
+              "metadata": {}
+            }
+            """.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: legacyData)
+
+        XCTAssertEqual(decoded.canvasFilter, .normal)
+    }
+
+    func testStoreUpdateCanvasFilterSupportsUndoRedo() {
+        let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
+
+        XCTAssertEqual(store.project.canvasFilter, .normal)
+
+        store.updateCanvasFilter(.mono)
+        XCTAssertEqual(store.project.canvasFilter, .mono)
+
+        store.undo()
+        XCTAssertEqual(store.project.canvasFilter, .normal)
+
+        store.redo()
+        XCTAssertEqual(store.project.canvasFilter, .mono)
+    }
+
     func testStoreAddShapeNodeSupportsUndoRedo() {
         let store = CanvasEditorStore(template: Self.sampleTemplate, configuration: .demo)
         let draft = CanvasShapeDraft(

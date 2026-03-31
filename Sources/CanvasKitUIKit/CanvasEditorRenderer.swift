@@ -3,10 +3,30 @@ import UIKit
 import CanvasKitCore
 
 enum CanvasEditorRenderer {
-    static func render(project: CanvasProject, assetLoader: CanvasAssetLoader) -> UIImage {
+    static func render(
+        project: CanvasProject,
+        assetLoader: CanvasAssetLoader,
+        excludingNodeIDs: Set<String> = [],
+        imageScale: CGFloat = 1
+    ) -> UIImage {
+        let baseImage = renderBaseImage(
+            project: project,
+            assetLoader: assetLoader,
+            excludingNodeIDs: excludingNodeIDs,
+            imageScale: imageScale
+        )
+        return applyFilter(project.canvasFilter, to: baseImage)
+    }
+
+    static func renderBaseImage(
+        project: CanvasProject,
+        assetLoader: CanvasAssetLoader,
+        excludingNodeIDs: Set<String> = [],
+        imageScale: CGFloat = 1
+    ) -> UIImage {
         let renderSize = project.canvasSize.cgSize
         let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
+        format.scale = max(imageScale, 0.1)
         format.opaque = false
 
         let renderer = UIGraphicsImageRenderer(size: renderSize, format: format)
@@ -18,11 +38,18 @@ enum CanvasEditorRenderer {
             drawBackground(project.background, in: canvasRect, assetLoader: assetLoader)
 
             for node in project.sortedNodes {
+                guard !excludingNodeIDs.contains(node.id) else {
+                    continue
+                }
                 draw(node: node, assetLoader: assetLoader, in: cgContext)
             }
 
             CanvasEraserPathBuilder.applyClearStrokes(project.eraserStrokes, in: cgContext)
         }
+    }
+
+    static func applyFilter(_ filter: CanvasFilterPreset, to image: UIImage) -> UIImage {
+        CanvasFilterProcessor.apply(filter, to: image)
     }
 
     private static func drawBackground(_ background: CanvasBackground, in rect: CGRect, assetLoader: CanvasAssetLoader) {
