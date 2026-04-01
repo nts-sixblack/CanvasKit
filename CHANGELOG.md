@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.0.0
+
+- added filter editing, shared signature tooling, and picker workflows to the editor runtime
+- added masked frame templates and masked image slot editing support
+- refreshed the example app to cover the new flows and mixed-state demos
+
 ## 1.0.2
 
 - updated selection handles to rotate with the selected node without inheriting node scale, which removes the counter-rotation feel on rotated items
