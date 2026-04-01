@@ -81,7 +81,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private let bottomPanel = UIView()
     private let historyActionsContainer = UIView()
     private let historyActionsStack = UIStackView()
-    private let toolbarGridStack = UIStackView()
+    private let toolbarScrollView = UIScrollView()
+    private let toolbarContentStack = UIStackView()
     private let panelScrimView = UIControl()
     private let inspectorContainerView = UIView()
     private let textInspectorView: CanvasTextInspectorView
@@ -95,6 +96,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var strings: CanvasEditorStrings { store.configuration.strings }
     private var layout: CanvasEditorLayout { store.configuration.layout }
     private var toolbarTileHeight: CGFloat { CGFloat(layout.toolbarTileHeight) }
+    private var toolbarTileMinimumWidth: CGFloat { max(72, toolbarTileHeight - 10) }
     private var historyButtonSize: CGFloat { CGFloat(layout.historyButtonSize) }
     private var canvasToHistorySpacing: CGFloat { CGFloat(layout.canvasToHistorySpacing) }
     private var historyToBottomPanelSpacing: CGFloat { CGFloat(layout.historyToBottomPanelSpacing) }
@@ -315,11 +317,19 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         layerPanelView.transform = layerPanelHiddenTransform
         layerPanelView.isUserInteractionEnabled = false
 
-        toolbarGridStack.translatesAutoresizingMaskIntoConstraints = false
-        toolbarGridStack.axis = .vertical
-        toolbarGridStack.spacing = 10
-        toolbarGridStack.distribution = .fillEqually
-        bottomPanel.addSubview(toolbarGridStack)
+        toolbarScrollView.translatesAutoresizingMaskIntoConstraints = false
+        toolbarScrollView.showsHorizontalScrollIndicator = false
+        toolbarScrollView.showsVerticalScrollIndicator = false
+        toolbarScrollView.alwaysBounceHorizontal = true
+        toolbarScrollView.alwaysBounceVertical = false
+        toolbarScrollView.isDirectionalLockEnabled = true
+        bottomPanel.addSubview(toolbarScrollView)
+
+        toolbarContentStack.translatesAutoresizingMaskIntoConstraints = false
+        toolbarContentStack.axis = .horizontal
+        toolbarContentStack.spacing = 10
+        toolbarContentStack.alignment = .fill
+        toolbarScrollView.addSubview(toolbarContentStack)
 
         textInspectorView.translatesAutoresizingMaskIntoConstraints = false
         brushInspectorView.translatesAutoresizingMaskIntoConstraints = false
@@ -368,10 +378,17 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             layersButton.widthAnchor.constraint(equalToConstant: historyButtonSize),
             layersButton.heightAnchor.constraint(equalToConstant: historyButtonSize),
 
-            toolbarGridStack.leadingAnchor.constraint(equalTo: bottomPanel.leadingAnchor, constant: 18),
-            toolbarGridStack.trailingAnchor.constraint(equalTo: bottomPanel.trailingAnchor, constant: -18),
-            toolbarGridStack.topAnchor.constraint(equalTo: bottomPanel.topAnchor, constant: 20),
-            toolbarGridStack.bottomAnchor.constraint(equalTo: bottomPanel.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            toolbarScrollView.leadingAnchor.constraint(equalTo: bottomPanel.leadingAnchor, constant: 18),
+            toolbarScrollView.trailingAnchor.constraint(equalTo: bottomPanel.trailingAnchor, constant: -18),
+            toolbarScrollView.topAnchor.constraint(equalTo: bottomPanel.topAnchor, constant: 20),
+            toolbarScrollView.bottomAnchor.constraint(equalTo: bottomPanel.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            toolbarScrollView.heightAnchor.constraint(equalToConstant: toolbarTileHeight),
+
+            toolbarContentStack.leadingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.leadingAnchor),
+            toolbarContentStack.trailingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.trailingAnchor),
+            toolbarContentStack.topAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.topAnchor),
+            toolbarContentStack.bottomAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.bottomAnchor),
+            toolbarContentStack.heightAnchor.constraint(equalTo: toolbarScrollView.frameLayoutGuide.heightAnchor),
 
             inspectorContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inspectorContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -432,8 +449,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         exportBarButtonItem.isEnabled = store.configuration.enabledTools.contains(.export)
         layersButton.addTarget(self, action: #selector(layersTapped), for: .touchUpInside)
 
-        toolbarRows(from: visibleToolDescriptors.map(\.button)).forEach { buttons in
-            toolbarGridStack.addArrangedSubview(makeToolbarRow(buttons))
+        visibleToolDescriptors.map(\.button).forEach { button in
+            toolbarContentStack.addArrangedSubview(button)
         }
     }
 
@@ -693,36 +710,6 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         CGAffineTransform(translationX: 26, y: -8)
     }
 
-    private func makeToolbarRow(_ arrangedSubviews: [UIView]) -> UIStackView {
-        let rowStack = UIStackView(arrangedSubviews: arrangedSubviews)
-        rowStack.axis = .horizontal
-        rowStack.spacing = 10
-        rowStack.alignment = .fill
-        rowStack.distribution = .fillEqually
-        return rowStack
-    }
-
-    private func toolbarRows(from buttons: [UIButton]) -> [[UIView]] {
-        guard !buttons.isEmpty else {
-            return []
-        }
-
-        var rows: [[UIView]] = []
-        var index = 0
-
-        while index < buttons.count {
-            let endIndex = min(index + 4, buttons.count)
-            var row: [UIView] = Array(buttons[index..<endIndex])
-            while row.count < 4 {
-                row.append(makeToolbarSpacerView())
-            }
-            rows.append(row)
-            index = endIndex
-        }
-
-        return rows
-    }
-
     private func toolbarToolDescriptors() -> [ToolbarToolDescriptor] {
         [
             ToolbarToolDescriptor(tool: .addText, button: addTextButton, action: #selector(addTextTapped), requiresSignatureStore: false),
@@ -736,12 +723,6 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             ToolbarToolDescriptor(tool: .delete, button: deleteButton, action: #selector(deleteTapped), requiresSignatureStore: false),
             ToolbarToolDescriptor(tool: .addBrush, button: addBrushButton, action: #selector(addBrushTapped), requiresSignatureStore: false)
         ]
-    }
-
-    private func makeToolbarSpacerView() -> UIView {
-        let spacerView = UIView()
-        spacerView.isUserInteractionEnabled = false
-        return spacerView
     }
 
     private func makeGridToolButton(title: String, systemImage: String) -> UIButton {
@@ -759,6 +740,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         button.configuration = configuration
         button.layer.cornerRadius = 22
         button.layer.cornerCurve = .continuous
+        button.titleLabel?.numberOfLines = 2
+        button.titleLabel?.textAlignment = .center
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
         button.configurationUpdateHandler = { button in
             guard var updatedConfiguration = button.configuration else {
                 return
@@ -775,6 +760,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             button.alpha = button.isEnabled ? 1 : 0.45
         }
         button.heightAnchor.constraint(equalToConstant: toolbarTileHeight).isActive = true
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: toolbarTileMinimumWidth).isActive = true
         return button
     }
 

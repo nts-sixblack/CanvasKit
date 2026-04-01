@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.1
+
+- changed the bottom toolbar from a multi-row grid into a horizontally scrollable tool strip on compact screens
+
 ## 2.0.0
 
 - added filter editing, shared signature tooling, and picker workflows to the editor runtime
