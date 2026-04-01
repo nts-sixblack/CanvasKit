@@ -112,6 +112,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var isInlineEditingText = false
     private var isLayerPanelVisible = false
     private var lastSelectedNodeID: String?
+    private var hasObservedInitialProject = false
+    private var hasCanvasChanges = false
     private var loadingState: CanvasEditorLoadingState = .none
     private var currentVisibleInspectorKind: VisibleInspectorKind = .none
     private var activeTextColorPickerTarget: CanvasTextInspectorColorTarget?
@@ -456,7 +458,13 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     private func bindStore() {
         projectObserverID = store.observeProject { [weak self] _ in
-            self?.refreshChrome()
+            guard let self else { return }
+            if self.hasObservedInitialProject {
+                self.hasCanvasChanges = true
+            } else {
+                self.hasObservedInitialProject = true
+            }
+            self.refreshChrome()
         }
         selectionObserverID = store.observeSelection { [weak self] selectedNodeID in
             guard let self else { return }
@@ -1185,6 +1193,29 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         present(alert, animated: true)
     }
 
+    private func presentCloseConfirmationAlert() {
+        let alert = UIAlertController(
+            title: strings.closeConfirmationTitle,
+            message: strings.closeConfirmationMessage,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(
+            title: strings.closeConfirmationStayButtonTitle,
+            style: .cancel
+        ))
+        alert.addAction(UIAlertAction(
+            title: strings.closeConfirmationDiscardButtonTitle,
+            style: .destructive
+        ) { [weak self] _ in
+            self?.closeEditor()
+        })
+        present(alert, animated: true)
+    }
+
+    private func closeEditor() {
+        delegate?.canvasEditorViewControllerDidCancel(self)
+    }
+
     func canvasLayerPanelView(_ layerPanelView: CanvasLayerPanelView, didSelectNodeID nodeID: String) {
         store.selectNode(nodeID)
     }
@@ -1447,7 +1478,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     @objc
     private func closeTapped() {
-        delegate?.canvasEditorViewControllerDidCancel(self)
+        guard hasCanvasChanges else {
+            closeEditor()
+            return
+        }
+        presentCloseConfirmationAlert()
     }
 
     @objc

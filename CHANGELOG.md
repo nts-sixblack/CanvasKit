@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.2
+
+- added a close confirmation alert that appears only after the canvas has been edited, so accidental back-navigation does not discard active work without warning
+
 ## 2.0.1
 
 - changed the bottom toolbar from a multi-row grid into a horizontally scrollable tool strip on compact screens

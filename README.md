@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `2.0.1`
+Current release: `2.0.2`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 

@@ -346,6 +346,10 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var resumeProjectTitle: String
     public var errorAlertTitle: String
     public var okButtonTitle: String
+    public var closeConfirmationTitle: String
+    public var closeConfirmationMessage: String
+    public var closeConfirmationStayButtonTitle: String
+    public var closeConfirmationDiscardButtonTitle: String
     public var importingImageMessage: String
     public var exportingImageMessage: String
     public var importImageFailureMessage: String
@@ -431,6 +435,10 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         resumeProjectTitle: String = "Resume Project",
         errorAlertTitle: String = "Error",
         okButtonTitle: String = "OK",
+        closeConfirmationTitle: String = "Discard canvas changes?",
+        closeConfirmationMessage: String = "Your current edits will be lost if you close now.",
+        closeConfirmationStayButtonTitle: String = "Stay",
+        closeConfirmationDiscardButtonTitle: String = "Discard",
         importingImageMessage: String = "Importing image...",
         exportingImageMessage: String = "Exporting image...",
         importImageFailureMessage: String = "Unable to import the selected image.",
@@ -515,6 +523,10 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.resumeProjectTitle = resumeProjectTitle
         self.errorAlertTitle = errorAlertTitle
         self.okButtonTitle = okButtonTitle
+        self.closeConfirmationTitle = closeConfirmationTitle
+        self.closeConfirmationMessage = closeConfirmationMessage
+        self.closeConfirmationStayButtonTitle = closeConfirmationStayButtonTitle
+        self.closeConfirmationDiscardButtonTitle = closeConfirmationDiscardButtonTitle
         self.importingImageMessage = importingImageMessage
         self.exportingImageMessage = exportingImageMessage
         self.importImageFailureMessage = importImageFailureMessage
