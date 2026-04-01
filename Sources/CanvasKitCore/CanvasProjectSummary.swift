@@ -10,7 +10,11 @@ public struct CanvasProjectSummary: Hashable, Sendable {
         self.canvasSize = project.canvasSize
         self.containsInlineImages =
             project.background.source?.kind == .inlineImage ||
-            project.nodes.contains(where: { $0.source?.kind == .inlineImage })
+            project.nodes.contains(where: {
+                $0.source?.kind == .inlineImage ||
+                $0.maskedImage?.maskSource.kind == .inlineImage ||
+                $0.maskedImage?.overlaySource?.kind == .inlineImage
+            })
     }
 }
 

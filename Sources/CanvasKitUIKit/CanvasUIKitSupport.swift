@@ -61,6 +61,66 @@ enum CanvasSymbolNodeLayout {
     }
 }
 
+enum CanvasAspectRatioLayout {
+    static func aspectFitRect(for sourceSize: CGSize, in bounds: CGRect) -> CGRect {
+        guard sourceSize.width > 0,
+              sourceSize.height > 0,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return bounds
+        }
+
+        let scale = min(bounds.width / sourceSize.width, bounds.height / sourceSize.height)
+        let fittedSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
+        return CGRect(
+            x: bounds.midX - (fittedSize.width / 2),
+            y: bounds.midY - (fittedSize.height / 2),
+            width: fittedSize.width,
+            height: fittedSize.height
+        )
+    }
+
+    static func aspectFillRect(for sourceSize: CGSize, in bounds: CGRect) -> CGRect {
+        guard sourceSize.width > 0,
+              sourceSize.height > 0,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return bounds
+        }
+
+        let scale = max(bounds.width / sourceSize.width, bounds.height / sourceSize.height)
+        let filledSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
+        return CGRect(
+            x: bounds.midX - (filledSize.width / 2),
+            y: bounds.midY - (filledSize.height / 2),
+            width: filledSize.width,
+            height: filledSize.height
+        )
+    }
+}
+
+struct CanvasResolvedMaskedImageLayout {
+    var center: CGPoint
+    var size: CGSize
+}
+
+enum CanvasMaskedImageLayout {
+    static func resolvedContentLayout(
+        imageSize: CGSize,
+        in bounds: CGRect,
+        contentTransform: CanvasMaskedImageContentTransform
+    ) -> CanvasResolvedMaskedImageLayout {
+        let baseRect = CanvasAspectRatioLayout.aspectFillRect(for: imageSize, in: bounds)
+        return CanvasResolvedMaskedImageLayout(
+            center: CGPoint(
+                x: baseRect.midX + contentTransform.offset.x,
+                y: baseRect.midY + contentTransform.offset.y
+            ),
+            size: baseRect.size
+        )
+    }
+}
+
 enum CanvasShapePathBuilder {
     static func localPoints(for payload: CanvasShapePayload) -> [CGPoint] {
         payload.points.map(\.cgPoint)

@@ -59,6 +59,11 @@ private enum VisibleInspectorKind {
     case eraser
 }
 
+private enum PhotoImportTarget: Equatable, Sendable {
+    case addImageNode
+    case maskedNode(String)
+}
+
 private struct ToolbarToolDescriptor {
     let tool: CanvasEditorTool
     let button: UIButton
@@ -122,6 +127,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var isBrushModeEnabled = false
     private var isEraserModeEnabled = false
     private var filterDraftPreset: CanvasFilterPreset?
+    private var pendingPhotoImportTarget: PhotoImportTarget?
 
     private var projectObserverID: UUID?
     private var selectionObserverID: UUID?
@@ -1132,6 +1138,51 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         store.addImageNode(source: signature.source, intrinsicSize: intrinsicSize)
     }
 
+    private func resolvedPhotoImportTargetForCurrentSelection() -> PhotoImportTarget {
+        guard let selectedNode = store.selectedNode,
+              selectedNode.kind == .maskedImage else {
+            return .addImageNode
+        }
+
+        return .maskedNode(selectedNode.id)
+    }
+
+    private func presentPhotoPicker(for target: PhotoImportTarget) {
+        pendingPhotoImportTarget = target
+
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    private func applyImportedPhoto(
+        source: CanvasAssetSource,
+        importedImageSize: CanvasSize,
+        target: PhotoImportTarget
+    ) {
+        switch target {
+        case .addImageNode:
+            store.addImageNode(source: source, intrinsicSize: importedImageSize)
+
+        case .maskedNode(let nodeID):
+            if store.selectedNodeID != nodeID {
+                store.selectNode(nodeID)
+            }
+
+            guard store.selectedNodeID == nodeID,
+                  store.selectedNode?.kind == .maskedImage else {
+                store.addImageNode(source: source, intrinsicSize: importedImageSize)
+                return
+            }
+
+            store.updateSelectedSource(source)
+        }
+    }
+
     private func presentInsertPicker(_ picker: UIViewController) {
         setLayerPanelVisible(false, animated: true)
         picker.modalPresentationStyle = .overFullScreen
@@ -1248,6 +1299,15 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         )
     }
 
+    func canvasStageViewDidTapEmptyMaskedImageNode(_ stageView: CanvasStageView) {
+        dismissEditingOverlays(animated: true)
+        guard let selectedNode = store.selectedNode,
+              selectedNode.kind == .maskedImage else {
+            return
+        }
+        presentPhotoPicker(for: .maskedNode(selectedNode.id))
+    }
+
     func canvasStageViewDidBeginInlineEditing(_ stageView: CanvasStageView) {
         isInlineEditingText = true
         isInspectorRequested = false
@@ -1358,6 +1418,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        let importTarget = pendingPhotoImportTarget ?? .addImageNode
+        pendingPhotoImportTarget = nil
         dismiss(animated: true)
         guard let result = results.first else {
             return
@@ -1388,7 +1450,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
                     return
                 }
 
-                self.store.addImageNode(source: source, intrinsicSize: CanvasSize(importedImageSize))
+                self.applyImportedPhoto(
+                    source: source,
+                    importedImageSize: CanvasSize(importedImageSize),
+                    target: importTarget
+                )
             }
         }
     }
@@ -1421,10 +1487,22 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         let exportImageFailureMessage = strings.exportImageFailureMessage
         setLoadingState(.exportingImage)
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        Task { [weak self] in
+            guard let self else { return }
+
+            let exportSources = Self.exportAssetSources(from: project)
+            await Task.detached(priority: .userInitiated) {
+                assetLoader.prefetchSynchronously(for: exportSources)
+            }.value
+
+            let imageData = await MainActor.run {
+                autoreleasepool {
+                    CanvasEditorRenderer.render(project: project, assetLoader: assetLoader).pngData()
+                }
+            }
+
             let result: Result<CanvasEditorResult, CanvasEditorOperationError> = autoreleasepool {
-                let image = CanvasEditorRenderer.render(project: project, assetLoader: assetLoader)
-                guard let imageData = image.pngData() else {
+                guard let imageData else {
                     return .failure(CanvasEditorOperationError.pngEncodingFailed)
                 }
 
@@ -1436,8 +1514,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
                 }
             }
 
-            Task { @MainActor [weak self] in
-                guard let self else { return }
+            await MainActor.run {
                 self.setLoadingState(.none)
 
                 switch result {
@@ -1459,6 +1536,29 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
                 }
             }
         }
+    }
+
+    private static func exportAssetSources(from project: CanvasProject) -> [CanvasAssetSource] {
+        var sources: [CanvasAssetSource] = []
+
+        if let backgroundSource = project.background.source {
+            sources.append(backgroundSource)
+        }
+
+        for node in project.nodes {
+            if let source = node.source {
+                sources.append(source)
+            }
+
+            if let maskedImage = node.maskedImage {
+                sources.append(maskedImage.maskSource)
+                if let overlaySource = maskedImage.overlaySource {
+                    sources.append(overlaySource)
+                }
+            }
+        }
+
+        return sources
     }
 
     @objc
@@ -1483,12 +1583,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     @objc
     private func addPhotoTapped() {
         dismissEditingOverlays(animated: true)
-        var configuration = PHPickerConfiguration()
-        configuration.filter = .images
-        configuration.selectionLimit = 1
-        let picker = PHPickerViewController(configuration: configuration)
-        picker.delegate = self
-        present(picker, animated: true)
+        presentPhotoPicker(for: resolvedPhotoImportTargetForCurrentSelection())
     }
 
     @objc
@@ -1846,6 +1941,12 @@ final class CanvasLayerPanelCell: UITableViewCell {
             previewLabel.isHidden = true
             previewImageView.image = UIImage(systemName: CanvasEditorUIRuntime.currentConfiguration.icons.layerImage)
             previewImageView.tintColor = CanvasEditorTheme.primaryText
+        case .maskedImage:
+            previewImageView.isHidden = false
+            previewLabel.isHidden = true
+            let maskImage = node.maskedImage.flatMap { Self.previewAssetLoader.imageSynchronously(for: $0.maskSource) }
+            previewImageView.image = maskImage ?? UIImage(systemName: CanvasEditorUIRuntime.currentConfiguration.icons.layerImage)
+            previewImageView.tintColor = maskImage == nil ? CanvasEditorTheme.primaryText : nil
         case .shape:
             previewImageView.isHidden = false
             previewLabel.isHidden = true
@@ -1874,6 +1975,8 @@ final class CanvasLayerPanelCell: UITableViewCell {
             return CanvasEditorUIRuntime.currentConfiguration.strings.layerStickerFallbackTitle
         case .image:
             return CanvasEditorUIRuntime.currentConfiguration.strings.layerImageFallbackTitle
+        case .maskedImage:
+            return CanvasEditorUIRuntime.currentConfiguration.strings.layerImageFallbackTitle
         case .shape:
             return node.shape?.type.displayTitle ?? CanvasEditorUIRuntime.currentConfiguration.strings.layerShapeFallbackTitle
         }
@@ -1888,6 +1991,8 @@ final class CanvasLayerPanelCell: UITableViewCell {
         case .sticker:
             return CanvasEditorTheme.layerStickerPreviewBackground
         case .image:
+            return CanvasEditorTheme.layerImagePreviewBackground
+        case .maskedImage:
             return CanvasEditorTheme.layerImagePreviewBackground
         case .shape:
             return CanvasEditorTheme.layerShapePreviewBackground

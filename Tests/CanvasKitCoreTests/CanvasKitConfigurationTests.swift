@@ -6,8 +6,24 @@ final class CanvasKitConfigurationTests: XCTestCase {
         let templates = CanvasTemplateLoader.loadTemplates(configuration: .default)
 
         XCTAssertFalse(templates.isEmpty)
+        XCTAssertTrue(templates.contains(where: { $0.id == "masked-frames" }))
         XCTAssertTrue(templates.contains(where: { $0.id == "square-vibes" }))
         XCTAssertTrue(templates.contains(where: { $0.id == "portrait-story" }))
+    }
+
+    func testMaskedFramesTemplateIncludesFilledAndEmptyMaskedSlots() throws {
+        let templates = CanvasTemplateLoader.loadTemplates(configuration: .default)
+        let template = try XCTUnwrap(templates.first(where: { $0.id == "masked-frames" }))
+        let maskedNodes = template.nodes.filter { $0.kind == .maskedImage }
+
+        XCTAssertEqual(template.version, 6)
+        XCTAssertEqual(maskedNodes.count, 2)
+        XCTAssertEqual(maskedNodes.filter { $0.source != nil }.count, 1)
+        XCTAssertEqual(maskedNodes.filter { $0.source == nil }.count, 1)
+        XCTAssertEqual(
+            template.nodes.first(where: { $0.id == "masked-title" })?.text,
+            "Tap + to add a photo, or tap the filled frame to replace it."
+        )
     }
 
     func testConfigurationLegacyAliasesStayInSync() {

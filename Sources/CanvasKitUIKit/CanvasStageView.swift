@@ -163,6 +163,7 @@ private final class CanvasEraserMaskLayer: CALayer {
 protocol CanvasStageViewDelegate: AnyObject {
     func canvasStageViewDidTapSelectedTextNode(_ stageView: CanvasStageView)
     func canvasStageViewDidTapSelectedShapeNode(_ stageView: CanvasStageView)
+    func canvasStageViewDidTapEmptyMaskedImageNode(_ stageView: CanvasStageView)
     func canvasStageViewDidBeginInlineEditing(_ stageView: CanvasStageView)
     func canvasStageViewDidEndInlineEditing(_ stageView: CanvasStageView)
     func canvasStageViewDidBeginNodeManipulation(_ stageView: CanvasStageView)
@@ -544,13 +545,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         let tappedSelectedTextNode = tappedNode?.id == store?.selectedNodeID &&
             (tappedNode?.kind == .text || tappedNode?.kind == .emoji)
         let tappedSelectedShapeNode = tappedNode?.id == store?.selectedNodeID && tappedNode?.kind == .shape
+        let tappedEmptyMaskedImageNode = tappedNode?.kind == .maskedImage && tappedNode?.source == nil
 
         if editingNodeID != nil, tappedNode?.id != editingNodeID {
             endInlineEditing()
         }
 
         store?.selectNode(tappedNode?.id)
-        if tappedSelectedTextNode, editingNodeID == nil {
+        if tappedEmptyMaskedImageNode {
+            delegate?.canvasStageViewDidTapEmptyMaskedImageNode(self)
+        } else if tappedSelectedTextNode, editingNodeID == nil {
             delegate?.canvasStageViewDidTapSelectedTextNode(self)
         } else if tappedSelectedShapeNode, editingNodeID == nil {
             delegate?.canvasStageViewDidTapSelectedShapeNode(self)
@@ -591,7 +595,8 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         case .changed:
             guard activePanNodeID == store.selectedNodeID,
-                  store.selectedNode?.isEditable == true else {
+                  let selectedNode = store.selectedNode,
+                  selectedNode.isEditable else {
                 return
             }
             let translation = gestureRecognizer.translation(in: self)
@@ -600,7 +605,21 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
                 y: (translation.y - activePanTranslation.y) / max(canvasScale, 0.001)
             )
             activePanTranslation = translation
-            store.moveSelectedNode(by: CanvasPoint(delta))
+
+            if selectedNode.kind == .maskedImage {
+                let projectedDelta = CanvasInteractionMath.projectScreenDeltaToLocalAxes(
+                    delta,
+                    rotation: selectedNode.transform.rotation
+                )
+                store.moveSelectedMaskedImageContent(
+                    by: CanvasPoint(
+                        x: projectedDelta.localDeltaX,
+                        y: projectedDelta.localDeltaY
+                    )
+                )
+            } else {
+                store.moveSelectedNode(by: CanvasPoint(delta))
+            }
 
         default:
             activePanTranslation = .zero
@@ -630,10 +649,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         switch gestureRecognizer.state {
         case .changed:
             guard activePinchNodeID == store.selectedNodeID,
-                  store.selectedNode?.isEditable == true else {
+                  let selectedNode = store.selectedNode,
+                  selectedNode.isEditable else {
                 return
             }
-            store.scaleSelectedNode(by: gestureRecognizer.scale)
+
+            if selectedNode.kind == .maskedImage {
+                store.scaleSelectedMaskedImageContent(by: gestureRecognizer.scale)
+            } else {
+                store.scaleSelectedNode(by: gestureRecognizer.scale)
+            }
             gestureRecognizer.scale = 1
 
         default:
@@ -665,10 +690,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         switch gestureRecognizer.state {
         case .changed:
             guard activeRotationNodeID == store.selectedNodeID,
-                  store.selectedNode?.isEditable == true else {
+                  let selectedNode = store.selectedNode,
+                  selectedNode.isEditable else {
                 return
             }
-            store.rotateSelectedNode(by: gestureRecognizer.rotation)
+
+            if selectedNode.kind == .maskedImage {
+                store.rotateSelectedMaskedImageContent(by: gestureRecognizer.rotation)
+            } else {
+                store.rotateSelectedNode(by: gestureRecognizer.rotation)
+            }
             gestureRecognizer.rotation = 0
 
         default:
@@ -690,7 +721,13 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         }
 
         let location = gestureRecognizer.location(in: canvasContainerView)
-        let center = selectedNode.transform.position.cgPoint
+        let center: CGPoint = if selectedNode.kind == .maskedImage,
+                                 let selectedView = nodeViews[selectedNode.id],
+                                 let maskedSelectionGeometry = selectedView.maskedImageSelectionGeometry {
+            selectedView.convert(maskedSelectionGeometry.center, to: canvasContainerView)
+        } else {
+            selectedNode.transform.position.cgPoint
+        }
         let vector = CGPoint(x: location.x - center.x, y: location.y - center.y)
 
         switch gestureRecognizer.state {
@@ -707,10 +744,18 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             let scaleMultiplier = currentLength / previousLength
             let previousAngle = atan2(previousVector.y, previousVector.x)
             let currentAngle = atan2(vector.y, vector.x)
-            store.transformSelectedNode(
-                scaleMultiplier: scaleMultiplier,
-                rotationDelta: currentAngle - previousAngle
-            )
+
+            if selectedNode.kind == .maskedImage {
+                store.transformSelectedMaskedImageContent(
+                    scaleMultiplier: scaleMultiplier,
+                    rotationDelta: currentAngle - previousAngle
+                )
+            } else {
+                store.transformSelectedNode(
+                    scaleMultiplier: scaleMultiplier,
+                    rotationDelta: currentAngle - previousAngle
+                )
+            }
             lastTransformVector = vector
 
         default:
@@ -1002,6 +1047,12 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         project.sortedNodes.forEach { node in
             let nodeView = CanvasNodeView()
+            nodeView.onMaskedImageGeometryDidChange = { [weak self, weak nodeView] in
+                guard let self, let nodeView, self.store?.selectedNodeID == nodeView.nodeID else {
+                    return
+                }
+                self.updateSelectionOverlay()
+            }
             nodeView.apply(node: node, assetLoader: assetLoader)
             nodeViews[node.id] = nodeView
         }
@@ -1126,6 +1177,10 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             }
         }
 
+        for node in sortedNodes {
+            nodeViews[node.id]?.setMaskedImageEditingState(node.id == store.selectedNodeID)
+        }
+
         updateInlineEditingVisibility()
     }
 
@@ -1159,18 +1214,32 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         selectionOverlay.apply(node: selectedNode)
         let overlayInset = selectionOverlay.contentInset
+        let maskedSelectionGeometry = selectedNode.kind == .maskedImage
+            ? selectedView.maskedImageSelectionGeometry
+            : nil
         let overlaySize = CGSize(
-            width: selectedView.bounds.width + (overlayInset * 2),
-            height: selectedView.bounds.height + (overlayInset * 2)
+            width: (maskedSelectionGeometry?.size.width ?? selectedView.bounds.width) + (overlayInset * 2),
+            height: (maskedSelectionGeometry?.size.height ?? selectedView.bounds.height) + (overlayInset * 2)
         )
-        let selectedCenter = selectedView.superview?.convert(selectedView.center, to: canvasContainerView) ?? selectedView.center
+        let selectedCenter: CGPoint = if let maskedSelectionGeometry {
+            selectedView.convert(maskedSelectionGeometry.center, to: canvasContainerView)
+        } else {
+            selectedView.superview?.convert(selectedView.center, to: canvasContainerView) ?? selectedView.center
+        }
+        let overlayTransform: CGAffineTransform = if let maskedSelectionGeometry {
+            CGAffineTransform(rotationAngle: maskedSelectionGeometry.rotation)
+                .scaledBy(x: maskedSelectionGeometry.scale, y: maskedSelectionGeometry.scale)
+                .concatenating(selectedView.transform)
+        } else {
+            selectedView.transform
+        }
 
         UIView.performWithoutAnimation {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             selectionOverlay.bounds = CGRect(origin: .zero, size: overlaySize)
             selectionOverlay.center = selectedCenter
-            selectionOverlay.transform = selectedView.transform
+            selectionOverlay.transform = overlayTransform
             selectionOverlay.isHidden = false
             selectionOverlay.layer.removeAllAnimations()
             CATransaction.commit()
@@ -1200,7 +1269,9 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         widthHandle.isHidden = selectedNode.kind != .text
         heightHandle.isHidden = selectedNode.kind != .text
 
-        let handleRotation = CGAffineTransform(rotationAngle: CGFloat(selectedNode.transform.rotation))
+        let handleRotation = CGAffineTransform(
+            rotationAngle: CGFloat(selectedNode.transform.rotation) + (maskedSelectionGeometry?.rotation ?? 0)
+        )
         [deleteHandle, widthHandle, heightHandle, transformHandle].forEach {
             $0.transform = handleRotation
             overlayControlContainerView.bringSubviewToFront($0)
