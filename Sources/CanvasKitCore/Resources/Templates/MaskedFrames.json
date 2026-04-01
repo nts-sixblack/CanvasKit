@@ -1,0 +1,129 @@
+{
+  "id" : "masked-frames",
+  "name" : "Masked Frames",
+  "version" : 6,
+  "canvasSize" : {
+    "width" : 900,
+    "height" : 1600
+  },
+  "background" : {
+    "kind" : "solidColor",
+    "color" : {
+      "red" : 0.9607843137,
+      "green" : 0.937254902,
+      "blue" : 0.9098039216,
+      "alpha" : 1
+    }
+  },
+  "nodes" : [
+    {
+      "id" : "masked-title",
+      "kind" : "text",
+      "name" : "Instructions",
+      "transform" : {
+        "position" : {
+          "x" : 450,
+          "y" : 126
+        },
+        "rotation" : 0,
+        "scale" : 1
+      },
+      "size" : {
+        "width" : 720,
+        "height" : 132
+      },
+      "zIndex" : 0,
+      "opacity" : 1,
+      "text" : "Tap + to add a photo, or tap the filled frame to replace it.",
+      "style" : {
+        "fontFamily" : "Avenir Next",
+        "weight" : "heavy",
+        "isItalic" : false,
+        "fontSize" : 42,
+        "foregroundColor" : {
+          "red" : 0.2156862745,
+          "green" : 0.2,
+          "blue" : 0.1882352941,
+          "alpha" : 1
+        },
+        "alignment" : "center",
+        "letterSpacing" : 0,
+        "lineSpacing" : 4,
+        "opacity" : 1
+      },
+      "isEditable" : true
+    },
+    {
+      "id" : "masked-slot-primary",
+      "kind" : "maskedImage",
+      "name" : "Primary Slot",
+      "transform" : {
+        "position" : {
+          "x" : 570,
+          "y" : 602
+        },
+        "rotation" : 0,
+        "scale" : 1
+      },
+      "size" : {
+        "width" : 478,
+        "height" : 712
+      },
+      "zIndex" : 1,
+      "opacity" : 1,
+      "source" : {
+        "kind" : "remoteURL",
+        "url" : "https://picsum.photos/seed/canvaskit-mask-primary/1200/1800"
+      },
+      "maskedImage" : {
+        "maskSource" : {
+          "kind" : "bundleImage",
+          "name" : "theme-mask-1"
+        },
+        "contentTransform" : {
+          "offset" : {
+            "x" : 0,
+            "y" : 0
+          },
+          "rotation" : 0,
+          "scale" : 1
+        }
+      },
+      "isEditable" : true
+    },
+    {
+      "id" : "masked-slot-secondary",
+      "kind" : "maskedImage",
+      "name" : "Secondary Slot",
+      "transform" : {
+        "position" : {
+          "x" : 673,
+          "y" : 1122
+        },
+        "rotation" : 0,
+        "scale" : 1
+      },
+      "size" : {
+        "width" : 334,
+        "height" : 500
+      },
+      "zIndex" : 2,
+      "opacity" : 1,
+      "maskedImage" : {
+        "maskSource" : {
+          "kind" : "bundleImage",
+          "name" : "theme-mask-2"
+        },
+        "contentTransform" : {
+          "offset" : {
+            "x" : 0,
+            "y" : -12
+          },
+          "rotation" : 0,
+          "scale" : 1.08
+        }
+      },
+      "isEditable" : true
+    }
+  ]
+}

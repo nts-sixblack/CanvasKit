@@ -291,6 +291,61 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertLessThanOrEqual(imageNode.size.height, store.project.canvasSize.height * 0.42 + 0.001)
     }
 
+    func testMaskedImageNodeRoundTripPreservesPayload() throws {
+        let originalNode = Self.maskedImageTemplate.nodes[0]
+        let project = CanvasProject(template: Self.maskedImageTemplate)
+
+        let data = try JSONEncoder().encode(project)
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: data)
+
+        XCTAssertEqual(decoded.nodes.first?.kind, .maskedImage)
+        XCTAssertEqual(decoded.nodes.first?.source, originalNode.source)
+        XCTAssertEqual(decoded.nodes.first?.maskedImage, originalNode.maskedImage)
+    }
+
+    func testUpdateSelectedMaskedImageSourceResetsContentTransformAndSupportsUndoRedo() {
+        let store = CanvasEditorStore(template: Self.maskedImageTemplate, configuration: .demo)
+        let maskedNodeID = Self.maskedImageTemplate.nodes[0].id
+
+        store.selectNode(maskedNodeID)
+        let originalSource = store.selectedNode?.source
+        let originalPayload = store.selectedNode?.maskedImage
+        let replacementSource = CanvasAssetSource.inlineImage(data: Data([0xAA, 0xBB, 0xCC]))
+
+        store.updateSelectedSource(replacementSource)
+
+        XCTAssertEqual(store.selectedNode?.source, replacementSource)
+        XCTAssertEqual(store.selectedNode?.maskedImage?.contentTransform, CanvasMaskedImageContentTransform())
+
+        store.undo()
+
+        XCTAssertEqual(store.selectedNode?.source, originalSource)
+        XCTAssertEqual(store.selectedNode?.maskedImage, originalPayload)
+
+        store.redo()
+
+        XCTAssertEqual(store.selectedNode?.source, replacementSource)
+        XCTAssertEqual(store.selectedNode?.maskedImage?.contentTransform, CanvasMaskedImageContentTransform())
+    }
+
+    func testMaskedImageContentTransformDoesNotChangeNodeTransform() {
+        let store = CanvasEditorStore(template: Self.maskedImageTemplate, configuration: .demo)
+        let maskedNodeID = Self.maskedImageTemplate.nodes[0].id
+
+        store.selectNode(maskedNodeID)
+        let originalNodeTransform = store.selectedNode?.transform
+
+        store.moveSelectedMaskedImageContent(by: CanvasPoint(x: 30, y: -18))
+        store.scaleSelectedMaskedImageContent(by: 1.3)
+        store.rotateSelectedMaskedImageContent(by: 0.42)
+
+        XCTAssertEqual(store.selectedNode?.transform, originalNodeTransform)
+        XCTAssertNotEqual(
+            store.selectedNode?.maskedImage?.contentTransform,
+            Self.maskedImageTemplate.nodes[0].maskedImage?.contentTransform
+        )
+    }
+
     func testOverlayHandleSizeClampsToMinimumForSmallDisplayedCanvas() {
         let resolved = CanvasOverlayHandleLayoutMath.resolvedHandleSize(
             baseHandleSize: 60,
@@ -701,6 +756,28 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertFalse(summary.containsInlineImages)
     }
 
+    func testProjectSummaryDetectsInlineMaskedAssets() {
+        let project = CanvasProject(
+            templateID: "masked-inline-summary",
+            canvasSize: CanvasSize(width: 640, height: 640),
+            background: .solid(.white),
+            nodes: [
+                CanvasNode(
+                    kind: .maskedImage,
+                    name: "Masked",
+                    transform: CanvasTransform(position: CanvasPoint(x: 320, y: 320)),
+                    size: CanvasSize(width: 280, height: 280),
+                    zIndex: 0,
+                    maskedImage: CanvasMaskedImagePayload(
+                        maskSource: .inlineImage(data: Data([0x01, 0x02, 0x03]))
+                    )
+                )
+            ]
+        )
+
+        XCTAssertTrue(project.summary.containsInlineImages)
+    }
+
     func testFreehandPathBuilderCreatesVisibleDotForSinglePoint() {
         guard let context = Self.makeBitmapContext(width: 32, height: 32) else {
             XCTFail("Expected bitmap context")
@@ -812,6 +889,34 @@ final class CanvasEditorCoreTests: XCTestCase {
                     style: .defaultText
                 )
             }
+        )
+    }
+
+    private static var maskedImageTemplate: CanvasTemplate {
+        CanvasTemplate(
+            id: "masked-image-template",
+            name: "Masked Image Template",
+            canvasSize: CanvasSize(width: 900, height: 1600),
+            background: .solid(CanvasColor(hex: "F7F4EF")),
+            nodes: [
+                CanvasNode(
+                    id: "masked-node-0",
+                    kind: .maskedImage,
+                    name: "Masked Slot",
+                    transform: CanvasTransform(position: CanvasPoint(x: 570, y: 602)),
+                    size: CanvasSize(width: 478, height: 712),
+                    zIndex: 0,
+                    source: .remoteURL("https://example.com/masked.png"),
+                    maskedImage: CanvasMaskedImagePayload(
+                        maskSource: .bundleImage(named: "theme-mask-1"),
+                        contentTransform: CanvasMaskedImageContentTransform(
+                            offset: CanvasPoint(x: 24, y: -18),
+                            rotation: 0.28,
+                            scale: 1.24
+                        )
+                    )
+                )
+            ]
         )
     }
 

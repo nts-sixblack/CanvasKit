@@ -126,6 +126,7 @@ public struct CanvasEditorTheme: Codable, Hashable, Sendable {
     public var placeholderBackgroundColor: CanvasColor
     public var placeholderBorderColor: CanvasColor
     public var placeholderTextColor: CanvasColor
+    public var maskedImageEditingBackgroundColor: CanvasColor
     public var loadingOverlayDimColor: CanvasColor
     public var loadingOverlayTextColor: CanvasColor
     public var layerTextPreviewBackgroundColor: CanvasColor
@@ -167,6 +168,7 @@ public struct CanvasEditorTheme: Codable, Hashable, Sendable {
         placeholderBackgroundColor: CanvasColor = CanvasColor(red: 1, green: 1, blue: 1, alpha: 0.12),
         placeholderBorderColor: CanvasColor = CanvasColor(red: 1, green: 1, blue: 1, alpha: 0.30),
         placeholderTextColor: CanvasColor = CanvasColor(red: 1, green: 1, blue: 1, alpha: 0.80),
+        maskedImageEditingBackgroundColor: CanvasColor = CanvasColor(red: 0, green: 0, blue: 0, alpha: 0.18),
         loadingOverlayDimColor: CanvasColor = CanvasColor(red: 0, green: 0, blue: 0, alpha: 0.24),
         loadingOverlayTextColor: CanvasColor = .white,
         layerTextPreviewBackgroundColor: CanvasColor = CanvasColor(red: 0.99, green: 0.77, blue: 0.71),
@@ -207,6 +209,7 @@ public struct CanvasEditorTheme: Codable, Hashable, Sendable {
         self.placeholderBackgroundColor = placeholderBackgroundColor
         self.placeholderBorderColor = placeholderBorderColor
         self.placeholderTextColor = placeholderTextColor
+        self.maskedImageEditingBackgroundColor = maskedImageEditingBackgroundColor
         self.loadingOverlayDimColor = loadingOverlayDimColor
         self.loadingOverlayTextColor = loadingOverlayTextColor
         self.layerTextPreviewBackgroundColor = layerTextPreviewBackgroundColor
@@ -776,6 +779,7 @@ public extension CanvasEditorConfiguration {
             ],
             templates: CanvasTemplateCatalog(
                 bundledFileNames: [
+                    "MaskedFrames",
                     "Poster45",
                     "PortraitStory",
                     "SquareVibes"

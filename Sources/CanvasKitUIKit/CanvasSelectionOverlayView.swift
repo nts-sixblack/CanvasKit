@@ -4,6 +4,8 @@ import CanvasKitCore
 
 final class CanvasSelectionOverlayView: UIView {
     private let borderLayer = CAShapeLayer()
+    private var resolvedSelectionInset: CGFloat
+    private var resolvedSelectionCornerRadius: CGFloat
     private var selectionInset: CGFloat {
         CGFloat(CanvasEditorUIRuntime.currentConfiguration.layout.selectionInset)
     }
@@ -12,6 +14,8 @@ final class CanvasSelectionOverlayView: UIView {
     }
 
     override init(frame: CGRect) {
+        resolvedSelectionInset = CGFloat(CanvasEditorUIRuntime.currentConfiguration.layout.selectionInset)
+        resolvedSelectionCornerRadius = CGFloat(CanvasEditorUIRuntime.currentConfiguration.layout.selectionCornerRadius)
         super.init(frame: frame)
         backgroundColor = .clear
         isUserInteractionEnabled = false
@@ -34,18 +38,34 @@ final class CanvasSelectionOverlayView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         borderLayer.frame = bounds
-        borderLayer.path = UIBezierPath(roundedRect: selectionRect, cornerRadius: selectionCornerRadius).cgPath
+        borderLayer.path = UIBezierPath(roundedRect: selectionRect, cornerRadius: resolvedSelectionCornerRadius).cgPath
         CATransaction.commit()
     }
 
-    func apply(node: CanvasNode) {}
-
     var contentInset: CGFloat {
-        selectionInset
+        resolvedSelectionInset
     }
 
     var selectionRect: CGRect {
-        bounds.insetBy(dx: selectionInset, dy: selectionInset)
+        bounds.insetBy(dx: resolvedSelectionInset, dy: resolvedSelectionInset)
+    }
+
+    func apply(node: CanvasNode) {
+        switch node.kind {
+        case .maskedImage:
+            resolvedSelectionInset = 0
+            resolvedSelectionCornerRadius = 12
+            borderLayer.lineDashPattern = nil
+            borderLayer.lineWidth = 2
+        default:
+            resolvedSelectionInset = selectionInset
+            resolvedSelectionCornerRadius = selectionCornerRadius
+            borderLayer.lineDashPattern = [8, 6]
+            borderLayer.lineWidth = 2
+        }
+
+        borderLayer.strokeColor = CanvasEditorTheme.selectionBorder.cgColor
+        setNeedsLayout()
     }
 }
 

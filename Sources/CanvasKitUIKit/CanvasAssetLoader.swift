@@ -78,6 +78,16 @@ final class CanvasAssetLoader: @unchecked Sendable {
     }
 
     func imageSynchronously(for source: CanvasAssetSource?) -> UIImage? {
+        imageSynchronously(for: source, allowsRemoteFetch: false)
+    }
+
+    func prefetchSynchronously(for sources: [CanvasAssetSource]) {
+        for source in sources {
+            _ = imageSynchronously(for: source, allowsRemoteFetch: true)
+        }
+    }
+
+    private func imageSynchronously(for source: CanvasAssetSource?, allowsRemoteFetch: Bool) -> UIImage? {
         guard let source else {
             return nil
         }
@@ -103,7 +113,15 @@ final class CanvasAssetLoader: @unchecked Sendable {
             store(image, for: source)
             return image
         case .remoteURL:
-            return cachedImage(for: source)
+            guard allowsRemoteFetch,
+                  let urlString = source.url,
+                  let url = URL(string: urlString),
+                  let data = try? Data(contentsOf: url),
+                  let image = UIImage(data: data) else {
+                return cachedImage(for: source)
+            }
+            store(image, for: source)
+            return image
         }
     }
 
@@ -170,7 +188,7 @@ final class CanvasAssetLoader: @unchecked Sendable {
     }
 
     private func cacheKey(for source: CanvasAssetSource) -> NSString {
-        NSString(string: "\(source.kind.rawValue)|\(source.name ?? "")|\(source.url ?? "")|\(source.dataBase64?.prefix(32) ?? "")")
+        NSString(string: "\(source.kind.rawValue)|\(source.hashValue)")
     }
 }
 

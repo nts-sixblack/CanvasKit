@@ -3,6 +3,7 @@ import UIKit
 import CanvasKitCore
 
 enum CanvasEditorRenderer {
+    @MainActor
     static func render(
         project: CanvasProject,
         assetLoader: CanvasAssetLoader,
@@ -18,6 +19,7 @@ enum CanvasEditorRenderer {
         return applyFilter(project.canvasFilter, to: baseImage)
     }
 
+    @MainActor
     static func renderBaseImage(
         project: CanvasProject,
         assetLoader: CanvasAssetLoader,
@@ -48,6 +50,7 @@ enum CanvasEditorRenderer {
         }
     }
 
+    @MainActor
     static func applyFilter(_ filter: CanvasFilterPreset, to image: UIImage) -> UIImage {
         CanvasFilterProcessor.apply(filter, to: image)
     }
@@ -61,7 +64,7 @@ enum CanvasEditorRenderer {
             return
         }
 
-        image.draw(in: aspectFillRect(for: image.size, in: rect))
+        image.draw(in: CanvasAspectRatioLayout.aspectFillRect(for: image.size, in: rect))
     }
 
     private static func draw(node: CanvasNode, assetLoader: CanvasAssetLoader, in context: CGContext) {
@@ -83,6 +86,8 @@ enum CanvasEditorRenderer {
             drawTextNode(node, in: nodeRect)
         case .sticker, .image:
             drawImageNode(node, assetLoader: assetLoader, in: nodeRect)
+        case .maskedImage:
+            drawMaskedImageNode(node, assetLoader: assetLoader, in: nodeRect)
         case .shape:
             drawShapeNode(node, in: context)
         }
@@ -129,11 +134,32 @@ enum CanvasEditorRenderer {
                 .withTintColor(node.style?.foregroundColor.uiColor ?? .white, renderingMode: .alwaysOriginal)
 
             let renderedSymbol = tintedSymbol ?? image
-            renderedSymbol.draw(in: aspectFitRect(for: renderedSymbol.size, in: rect))
+            renderedSymbol.draw(in: CanvasAspectRatioLayout.aspectFitRect(for: renderedSymbol.size, in: rect))
             return
         }
 
-        image.draw(in: aspectFitRect(for: image.size, in: rect))
+        image.draw(in: CanvasAspectRatioLayout.aspectFitRect(for: image.size, in: rect))
+    }
+
+    private static func drawMaskedImageNode(_ node: CanvasNode, assetLoader: CanvasAssetLoader, in rect: CGRect) {
+        guard rect.width > 0, rect.height > 0 else {
+            return
+        }
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.opaque = false
+        format.scale = 1
+
+        let renderer = UIGraphicsImageRenderer(size: rect.size, format: format)
+        let image = renderer.image { rendererContext in
+            let nodeView = CanvasNodeView(frame: CGRect(origin: .zero, size: rect.size))
+            nodeView.apply(node: node, assetLoader: assetLoader)
+            nodeView.setMaskedImageEditingState(false)
+            nodeView.layoutIfNeeded()
+            nodeView.layer.render(in: rendererContext.cgContext)
+        }
+
+        image.draw(in: rect)
     }
 
     private static func drawShapeNode(_ node: CanvasNode, in context: CGContext) {
@@ -153,34 +179,5 @@ enum CanvasEditorRenderer {
         context.restoreGState()
     }
 
-    private static func aspectFitRect(for sourceSize: CGSize, in bounds: CGRect) -> CGRect {
-        guard sourceSize.width > 0, sourceSize.height > 0, bounds.width > 0, bounds.height > 0 else {
-            return bounds
-        }
-
-        let scale = min(bounds.width / sourceSize.width, bounds.height / sourceSize.height)
-        let fittedSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
-        return CGRect(
-            x: bounds.midX - (fittedSize.width / 2),
-            y: bounds.midY - (fittedSize.height / 2),
-            width: fittedSize.width,
-            height: fittedSize.height
-        )
-    }
-
-    private static func aspectFillRect(for sourceSize: CGSize, in bounds: CGRect) -> CGRect {
-        guard sourceSize.width > 0, sourceSize.height > 0, bounds.width > 0, bounds.height > 0 else {
-            return bounds
-        }
-
-        let scale = max(bounds.width / sourceSize.width, bounds.height / sourceSize.height)
-        let filledSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
-        return CGRect(
-            x: bounds.midX - (filledSize.width / 2),
-            y: bounds.midY - (filledSize.height / 2),
-            width: filledSize.width,
-            height: filledSize.height
-        )
-    }
 }
 #endif

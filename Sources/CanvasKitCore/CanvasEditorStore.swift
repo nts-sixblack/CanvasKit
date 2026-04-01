@@ -218,6 +218,27 @@ public final class CanvasEditorStore {
         addNode(node)
     }
 
+    public func addMaskedImageNode(
+        maskSource: CanvasAssetSource,
+        overlaySource: CanvasAssetSource? = nil,
+        frameSize: CanvasSize,
+        source: CanvasAssetSource? = nil
+    ) {
+        let node = CanvasNode(
+            kind: .maskedImage,
+            name: "Masked Image",
+            transform: CanvasTransform(position: defaultNodePosition()),
+            size: frameSize,
+            zIndex: nextZIndex(),
+            source: source,
+            maskedImage: CanvasMaskedImagePayload(
+                maskSource: maskSource,
+                overlaySource: overlaySource
+            )
+        )
+        addNode(node)
+    }
+
     public func addShapeNode(from draft: CanvasShapeDraft) {
         guard let normalizedShape = normalizeShapeNode(from: draft) else {
             return
@@ -263,6 +284,9 @@ public final class CanvasEditorStore {
     public func updateSelectedSource(_ source: CanvasAssetSource) {
         updateSelectedNode { node in
             node.source = source
+            if node.kind == .maskedImage {
+                node.maskedImage?.contentTransform = CanvasMaskedImageContentTransform()
+            }
         }
     }
 
@@ -341,6 +365,38 @@ public final class CanvasEditorStore {
         updateSelectedNode { node in
             node.transform.scale = max(0.2, min(6.0, node.transform.scale * scaleMultiplier))
             node.transform.rotation += rotationDelta
+        }
+    }
+
+    public func moveSelectedMaskedImageContent(by delta: CanvasPoint) {
+        updateSelectedMaskedImage { maskedImage in
+            maskedImage.contentTransform.offset.x += delta.x
+            maskedImage.contentTransform.offset.y += delta.y
+        }
+    }
+
+    public func scaleSelectedMaskedImageContent(by multiplier: Double) {
+        updateSelectedMaskedImage { maskedImage in
+            maskedImage.contentTransform.scale = max(
+                0.2,
+                min(6.0, maskedImage.contentTransform.scale * multiplier)
+            )
+        }
+    }
+
+    public func rotateSelectedMaskedImageContent(by radians: Double) {
+        updateSelectedMaskedImage { maskedImage in
+            maskedImage.contentTransform.rotation += radians
+        }
+    }
+
+    public func transformSelectedMaskedImageContent(scaleMultiplier: Double, rotationDelta: Double) {
+        updateSelectedMaskedImage { maskedImage in
+            maskedImage.contentTransform.scale = max(
+                0.2,
+                min(6.0, maskedImage.contentTransform.scale * scaleMultiplier)
+            )
+            maskedImage.contentTransform.rotation += rotationDelta
         }
     }
 
@@ -504,6 +560,17 @@ public final class CanvasEditorStore {
             }
             mutation(&project.nodes[index])
             return true
+        }
+    }
+
+    private func updateSelectedMaskedImage(_ mutation: (inout CanvasMaskedImagePayload) -> Void) {
+        updateSelectedNode { node in
+            guard node.kind == .maskedImage,
+                  node.maskedImage != nil else {
+                return
+            }
+
+            mutation(&node.maskedImage!)
         }
     }
 

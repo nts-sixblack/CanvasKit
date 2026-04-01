@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum CanvasSchemaVersion {
-    public static let current = 4
+    public static let current = 5
 }
 
 public struct CanvasSize: Codable, Hashable, Sendable {
@@ -58,6 +58,7 @@ public enum CanvasNodeKind: String, Codable, CaseIterable, Sendable {
     case emoji
     case sticker
     case image
+    case maskedImage
     case shape
 }
 
@@ -478,6 +479,38 @@ public extension CanvasTextStyle {
     }
 }
 
+public struct CanvasMaskedImageContentTransform: Codable, Hashable, Sendable {
+    public var offset: CanvasPoint
+    public var rotation: Double
+    public var scale: Double
+
+    public init(
+        offset: CanvasPoint = CanvasPoint(x: 0, y: 0),
+        rotation: Double = 0,
+        scale: Double = 1
+    ) {
+        self.offset = offset
+        self.rotation = rotation
+        self.scale = scale
+    }
+}
+
+public struct CanvasMaskedImagePayload: Codable, Hashable, Sendable {
+    public var maskSource: CanvasAssetSource
+    public var overlaySource: CanvasAssetSource?
+    public var contentTransform: CanvasMaskedImageContentTransform
+
+    public init(
+        maskSource: CanvasAssetSource,
+        overlaySource: CanvasAssetSource? = nil,
+        contentTransform: CanvasMaskedImageContentTransform = CanvasMaskedImageContentTransform()
+    ) {
+        self.maskSource = maskSource
+        self.overlaySource = overlaySource
+        self.contentTransform = contentTransform
+    }
+}
+
 public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var kind: CanvasNodeKind
@@ -489,6 +522,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
     public var source: CanvasAssetSource?
     public var text: String?
     public var style: CanvasTextStyle?
+    public var maskedImage: CanvasMaskedImagePayload?
     public var shape: CanvasShapePayload?
     public var isEditable: Bool
 
@@ -503,6 +537,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         case source
         case text
         case style
+        case maskedImage
         case shape
         case isEditable
     }
@@ -518,6 +553,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         source: CanvasAssetSource? = nil,
         text: String? = nil,
         style: CanvasTextStyle? = nil,
+        maskedImage: CanvasMaskedImagePayload? = nil,
         shape: CanvasShapePayload? = nil,
         isEditable: Bool = true
     ) {
@@ -531,6 +567,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         self.source = source
         self.text = text
         self.style = style
+        self.maskedImage = maskedImage
         self.shape = shape
         self.isEditable = isEditable
     }
@@ -547,6 +584,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         source = try container.decodeIfPresent(CanvasAssetSource.self, forKey: .source)
         text = try container.decodeIfPresent(String.self, forKey: .text)
         style = try container.decodeIfPresent(CanvasTextStyle.self, forKey: .style)
+        maskedImage = try container.decodeIfPresent(CanvasMaskedImagePayload.self, forKey: .maskedImage)
         shape = try container.decodeIfPresent(CanvasShapePayload.self, forKey: .shape)
         isEditable = try container.decodeIfPresent(Bool.self, forKey: .isEditable) ?? true
     }
@@ -563,6 +601,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         try container.encodeIfPresent(source, forKey: .source)
         try container.encodeIfPresent(text, forKey: .text)
         try container.encodeIfPresent(style, forKey: .style)
+        try container.encodeIfPresent(maskedImage, forKey: .maskedImage)
         try container.encodeIfPresent(shape, forKey: .shape)
         try container.encode(isEditable, forKey: .isEditable)
     }

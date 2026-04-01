@@ -30,6 +30,7 @@ extension CanvasEditorTheme {
     var placeholderBackground: UIColor { placeholderBackgroundColor.uiColor }
     var placeholderBorder: UIColor { placeholderBorderColor.uiColor }
     var placeholderText: UIColor { placeholderTextColor.uiColor }
+    var maskedImageEditingBackground: UIColor { maskedImageEditingBackgroundColor.uiColor }
     var loadingOverlayDim: UIColor { loadingOverlayDimColor.uiColor }
     var loadingOverlayText: UIColor { loadingOverlayTextColor.uiColor }
     var layerTextPreviewBackground: UIColor { layerTextPreviewBackgroundColor.uiColor }
@@ -67,6 +68,7 @@ extension CanvasEditorTheme {
     static var placeholderBackground: UIColor { current.placeholderBackground }
     static var placeholderBorder: UIColor { current.placeholderBorder }
     static var placeholderText: UIColor { current.placeholderText }
+    static var maskedImageEditingBackground: UIColor { current.maskedImageEditingBackground }
     static var loadingOverlayDim: UIColor { current.loadingOverlayDim }
     static var loadingOverlayText: UIColor { current.loadingOverlayText }
     static var layerTextPreviewBackground: UIColor { current.layerTextPreviewBackground }
