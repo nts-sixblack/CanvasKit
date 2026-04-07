@@ -30,6 +30,14 @@ final class CanvasNodeView: UIView {
     private var resolvedMaskedContentLayout: CanvasResolvedMaskedImageLayout?
     private var isMaskedImageEditingSelected = false
     private var usesMaskedPlaceholderStyle = false
+    var viewportScale: CGFloat = 1 {
+        didSet {
+            guard oldValue != viewportScale else {
+                return
+            }
+            setNeedsLayout()
+        }
+    }
 
     var maskedImageSelectionGeometry: CanvasMaskedImageSelectionGeometry? {
         guard let maskedImagePayload,
@@ -124,7 +132,10 @@ final class CanvasNodeView: UIView {
         maskedOverlayImageView.frame = bounds
         placeholderView.frame = bounds
         placeholderLabel.frame = placeholderView.bounds.insetBy(dx: 12, dy: 12)
-        let plusIconSize = max(30, min(44, min(bounds.width, bounds.height) * 0.2))
+        let templateShortSide = min(bounds.width, bounds.height)
+        let displayedShortSide = templateShortSide * max(viewportScale, 0.001)
+        let desiredDisplayedPlusIconSize = max(22, min(34, displayedShortSide * 0.3))
+        let plusIconSize = min(templateShortSide * 0.85, desiredDisplayedPlusIconSize / max(viewportScale, 0.001))
         maskedPlaceholderPlusIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(
             pointSize: plusIconSize,
             weight: .regular

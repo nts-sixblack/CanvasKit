@@ -42,6 +42,13 @@ public final class CanvasEditorStore {
         Array(project.sortedNodes.reversed())
     }
 
+    public var canDeleteSelectedContent: Bool {
+        guard let selectedNode else {
+            return false
+        }
+        return canDeleteContent(for: selectedNode)
+    }
+
     public var canUndo: Bool { history.canUndo }
     public var canRedo: Bool { history.canRedo }
 
@@ -222,7 +229,8 @@ public final class CanvasEditorStore {
         maskSource: CanvasAssetSource,
         overlaySource: CanvasAssetSource? = nil,
         frameSize: CanvasSize,
-        source: CanvasAssetSource? = nil
+        source: CanvasAssetSource? = nil,
+        deletesNodeOnDelete: Bool = false
     ) {
         let node = CanvasNode(
             kind: .maskedImage,
@@ -233,7 +241,8 @@ public final class CanvasEditorStore {
             source: source,
             maskedImage: CanvasMaskedImagePayload(
                 maskSource: maskSource,
-                overlaySource: overlaySource
+                overlaySource: overlaySource,
+                deletesNodeOnDelete: deletesNodeOnDelete
             )
         )
         addNode(node)
@@ -465,7 +474,45 @@ public final class CanvasEditorStore {
         addNode(node)
     }
 
+    public func deleteSelectedContent() {
+        guard let selectedNodeID,
+              let selectedNode else {
+            return
+        }
+
+        guard canDeleteContent(for: selectedNode) else {
+            return
+        }
+
+        if selectedNode.kind == .maskedImage,
+           let payload = selectedNode.maskedImage,
+           !payload.deletesNodeOnDelete {
+            _ = commitMutation { project in
+                guard let index = project.nodes.firstIndex(where: { $0.id == selectedNodeID }),
+                      project.nodes[index].isEditable,
+                      project.nodes[index].kind == .maskedImage,
+                      project.nodes[index].source != nil,
+                      var maskedImage = project.nodes[index].maskedImage,
+                      !maskedImage.deletesNodeOnDelete else {
+                    return false
+                }
+
+                project.nodes[index].source = nil
+                maskedImage.contentTransform = CanvasMaskedImageContentTransform()
+                project.nodes[index].maskedImage = maskedImage
+                return true
+            }
+            return
+        }
+
+        forceDeleteSelectedNode()
+    }
+
     public func deleteSelectedNode() {
+        deleteSelectedContent()
+    }
+
+    public func forceDeleteSelectedNode() {
         guard let selectedNodeID,
               project.nodes.contains(where: { $0.id == selectedNodeID && $0.isEditable }) else {
             return
@@ -572,6 +619,19 @@ public final class CanvasEditorStore {
 
             mutation(&node.maskedImage!)
         }
+    }
+
+    private func canDeleteContent(for node: CanvasNode) -> Bool {
+        guard node.isEditable else {
+            return false
+        }
+
+        guard node.kind == .maskedImage,
+              let maskedImage = node.maskedImage else {
+            return true
+        }
+
+        return maskedImage.deletesNodeOnDelete || node.source != nil
     }
 
     private func commitSelectionMutation(selectedNodeID nextSelection: String?, _ mutation: (inout CanvasProject) -> Bool) {

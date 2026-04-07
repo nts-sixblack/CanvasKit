@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum CanvasSchemaVersion {
-    public static let current = 5
+    public static let current = 6
 }
 
 public struct CanvasSize: Codable, Hashable, Sendable {
@@ -499,15 +499,44 @@ public struct CanvasMaskedImagePayload: Codable, Hashable, Sendable {
     public var maskSource: CanvasAssetSource
     public var overlaySource: CanvasAssetSource?
     public var contentTransform: CanvasMaskedImageContentTransform
+    public var deletesNodeOnDelete: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case maskSource
+        case overlaySource
+        case contentTransform
+        case deletesNodeOnDelete
+    }
 
     public init(
         maskSource: CanvasAssetSource,
         overlaySource: CanvasAssetSource? = nil,
-        contentTransform: CanvasMaskedImageContentTransform = CanvasMaskedImageContentTransform()
+        contentTransform: CanvasMaskedImageContentTransform = CanvasMaskedImageContentTransform(),
+        deletesNodeOnDelete: Bool = false
     ) {
         self.maskSource = maskSource
         self.overlaySource = overlaySource
         self.contentTransform = contentTransform
+        self.deletesNodeOnDelete = deletesNodeOnDelete
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        maskSource = try container.decode(CanvasAssetSource.self, forKey: .maskSource)
+        overlaySource = try container.decodeIfPresent(CanvasAssetSource.self, forKey: .overlaySource)
+        contentTransform = try container.decodeIfPresent(
+            CanvasMaskedImageContentTransform.self,
+            forKey: .contentTransform
+        ) ?? CanvasMaskedImageContentTransform()
+        deletesNodeOnDelete = try container.decodeIfPresent(Bool.self, forKey: .deletesNodeOnDelete) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(maskSource, forKey: .maskSource)
+        try container.encodeIfPresent(overlaySource, forKey: .overlaySource)
+        try container.encode(contentTransform, forKey: .contentTransform)
+        try container.encode(deletesNodeOnDelete, forKey: .deletesNodeOnDelete)
     }
 }
 

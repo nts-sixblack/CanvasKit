@@ -15,14 +15,18 @@ final class CanvasKitConfigurationTests: XCTestCase {
         let templates = CanvasTemplateLoader.loadTemplates(configuration: .default)
         let template = try XCTUnwrap(templates.first(where: { $0.id == "masked-frames" }))
         let maskedNodes = template.nodes.filter { $0.kind == .maskedImage }
+        let primaryNode = try XCTUnwrap(template.nodes.first(where: { $0.id == "masked-slot-primary" }))
+        let secondaryNode = try XCTUnwrap(template.nodes.first(where: { $0.id == "masked-slot-secondary" }))
 
-        XCTAssertEqual(template.version, 6)
+        XCTAssertEqual(template.version, 7)
         XCTAssertEqual(maskedNodes.count, 2)
         XCTAssertEqual(maskedNodes.filter { $0.source != nil }.count, 1)
         XCTAssertEqual(maskedNodes.filter { $0.source == nil }.count, 1)
+        XCTAssertFalse(primaryNode.maskedImage?.deletesNodeOnDelete ?? true)
+        XCTAssertTrue(secondaryNode.maskedImage?.deletesNodeOnDelete ?? false)
         XCTAssertEqual(
             template.nodes.first(where: { $0.id == "masked-title" })?.text,
-            "Tap + to add a photo, or tap the filled frame to replace it."
+            "Tap + to add a photo. Deleting the large frame clears its photo; deleting the small frame removes the slot."
         )
     }
 

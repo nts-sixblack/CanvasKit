@@ -897,7 +897,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
     private func handleDeleteTapped() {
         endInlineEditing()
-        store?.deleteSelectedNode()
+        store?.deleteSelectedContent()
     }
 
     private func setNodeGesturesEnabled(_ enabled: Bool) {
@@ -1047,6 +1047,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
 
         project.sortedNodes.forEach { node in
             let nodeView = CanvasNodeView()
+            nodeView.viewportScale = canvasScale
             nodeView.onMaskedImageGeometryDidChange = { [weak self, weak nodeView] in
                 guard let self, let nodeView, self.store?.selectedNodeID == nodeView.nodeID else {
                     return
@@ -1071,6 +1072,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private func applyViewportLayout() {
         let layout = CanvasViewportMath.fit(canvasSize: canvasSize, in: bounds, padding: viewportPadding)
         canvasScale = layout.scale
+        nodeViews.values.forEach { $0.viewportScale = canvasScale }
 
         canvasContainerView.bounds = CGRect(origin: .zero, size: canvasSize)
         canvasContainerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
@@ -1264,7 +1266,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             to: overlayControlContainerView
         )
 
-        deleteHandle.isHidden = false
+        deleteHandle.isHidden = !store.canDeleteSelectedContent
         transformHandle.isHidden = false
         widthHandle.isHidden = selectedNode.kind != .text
         heightHandle.isHidden = selectedNode.kind != .text

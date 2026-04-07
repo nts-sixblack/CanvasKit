@@ -488,7 +488,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
         let hasSelection = store.selectedNode != nil
         duplicateButton.isEnabled = hasSelection
-        deleteButton.isEnabled = hasSelection
+        deleteButton.isEnabled = store.canDeleteSelectedContent
         undoButton.isEnabled = store.canUndo
         redoButton.isEnabled = store.canRedo
         updateBrushButtonAppearance()
@@ -1650,7 +1650,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     @objc
     private func deleteTapped() {
         dismissEditingOverlays(animated: true)
-        store.deleteSelectedNode()
+        store.deleteSelectedContent()
     }
 
     @objc

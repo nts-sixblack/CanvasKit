@@ -1,7 +1,7 @@
 {
   "id" : "masked-frames",
   "name" : "Masked Frames",
-  "version" : 6,
+  "version" : 7,
   "canvasSize" : {
     "width" : 900,
     "height" : 1600
@@ -34,7 +34,7 @@
       },
       "zIndex" : 0,
       "opacity" : 1,
-      "text" : "Tap + to add a photo, or tap the filled frame to replace it.",
+      "text" : "Tap + to add a photo. Deleting the large frame clears its photo; deleting the small frame removes the slot.",
       "style" : {
         "fontFamily" : "Avenir Next",
         "weight" : "heavy",
@@ -87,7 +87,8 @@
           },
           "rotation" : 0,
           "scale" : 1
-        }
+        },
+        "deletesNodeOnDelete" : false
       },
       "isEditable" : true
     },
@@ -121,7 +122,8 @@
           },
           "rotation" : 0,
           "scale" : 1.08
-        }
+        },
+        "deletesNodeOnDelete" : true
       },
       "isEditable" : true
     }

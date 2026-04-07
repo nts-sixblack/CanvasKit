@@ -268,6 +268,13 @@ final class CanvasKitUIKitTests: XCTestCase {
             )
         )
         XCTAssertFalse(plusView.isHidden)
+        XCTAssertEqual(plusView.bounds.width, 34, accuracy: 0.001)
+        XCTAssertEqual(plusView.bounds.height, 34, accuracy: 0.001)
+
+        view.viewportScale = 0.2
+        view.layoutIfNeeded()
+        XCTAssertGreaterThan(plusView.bounds.width, 80)
+        XCTAssertGreaterThan(plusView.bounds.height, 80)
 
         view.apply(node: filledNode, assetLoader: assetLoader)
         view.layoutIfNeeded()

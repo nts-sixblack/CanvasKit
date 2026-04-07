@@ -303,6 +303,24 @@ final class CanvasEditorCoreTests: XCTestCase {
         XCTAssertEqual(decoded.nodes.first?.maskedImage, originalNode.maskedImage)
     }
 
+    func testMaskedImagePayloadDecodesMissingDeleteFlagAsKeepingMask() throws {
+        let legacyData = Data(
+            """
+            {
+              "maskSource": {
+                "kind": "bundleImage",
+                "name": "theme-mask-1"
+              }
+            }
+            """.utf8
+        )
+
+        let payload = try JSONDecoder().decode(CanvasMaskedImagePayload.self, from: legacyData)
+
+        XCTAssertFalse(payload.deletesNodeOnDelete)
+        XCTAssertEqual(payload.contentTransform, CanvasMaskedImageContentTransform())
+    }
+
     func testUpdateSelectedMaskedImageSourceResetsContentTransformAndSupportsUndoRedo() {
         let store = CanvasEditorStore(template: Self.maskedImageTemplate, configuration: .demo)
         let maskedNodeID = Self.maskedImageTemplate.nodes[0].id
@@ -326,6 +344,83 @@ final class CanvasEditorCoreTests: XCTestCase {
 
         XCTAssertEqual(store.selectedNode?.source, replacementSource)
         XCTAssertEqual(store.selectedNode?.maskedImage?.contentTransform, CanvasMaskedImageContentTransform())
+    }
+
+    func testDeleteSelectedNodeClearsPersistentMaskedImageContentAndSupportsUndoRedo() {
+        let store = CanvasEditorStore(template: Self.maskedImageTemplate, configuration: .demo)
+        let maskedNodeID = Self.maskedImageTemplate.nodes[0].id
+        let originalNodeCount = store.project.nodes.count
+        let originalPayload = Self.maskedImageTemplate.nodes[0].maskedImage
+        let originalSource = Self.maskedImageTemplate.nodes[0].source
+
+        store.selectNode(maskedNodeID)
+        XCTAssertTrue(store.canDeleteSelectedContent)
+
+        store.deleteSelectedNode()
+
+        XCTAssertEqual(store.project.nodes.count, originalNodeCount)
+        XCTAssertEqual(store.selectedNodeID, maskedNodeID)
+        XCTAssertNil(store.selectedNode?.source)
+        XCTAssertEqual(store.selectedNode?.maskedImage?.contentTransform, CanvasMaskedImageContentTransform())
+        XCTAssertFalse(store.canDeleteSelectedContent)
+
+        store.undo()
+
+        XCTAssertEqual(store.project.nodes.count, originalNodeCount)
+        XCTAssertEqual(store.selectedNodeID, maskedNodeID)
+        XCTAssertEqual(store.selectedNode?.source, originalSource)
+        XCTAssertEqual(store.selectedNode?.maskedImage, originalPayload)
+        XCTAssertTrue(store.canDeleteSelectedContent)
+
+        store.redo()
+
+        XCTAssertEqual(store.project.nodes.count, originalNodeCount)
+        XCTAssertEqual(store.selectedNodeID, maskedNodeID)
+        XCTAssertNil(store.selectedNode?.source)
+        XCTAssertEqual(store.selectedNode?.maskedImage?.contentTransform, CanvasMaskedImageContentTransform())
+        XCTAssertFalse(store.canDeleteSelectedContent)
+    }
+
+    func testPersistentMaskedImageWithoutSourceCannotBeDeleted() {
+        var template = Self.maskedImageTemplate
+        template.nodes[0].source = nil
+
+        let store = CanvasEditorStore(template: template, configuration: .demo)
+        let maskedNodeID = template.nodes[0].id
+
+        store.selectNode(maskedNodeID)
+
+        XCTAssertFalse(store.canDeleteSelectedContent)
+
+        store.deleteSelectedContent()
+
+        XCTAssertEqual(store.project.nodes.count, 1)
+        XCTAssertEqual(store.selectedNodeID, maskedNodeID)
+    }
+
+    func testDeleteSelectedContentRemovesMaskedNodeWhenConfiguredToDeleteNode() {
+        let store = CanvasEditorStore(template: Self.removableMaskedImageTemplate, configuration: .demo)
+        let maskedNodeID = Self.removableMaskedImageTemplate.nodes[0].id
+        let originalCount = store.project.nodes.count
+
+        store.selectNode(maskedNodeID)
+        XCTAssertTrue(store.canDeleteSelectedContent)
+
+        store.deleteSelectedContent()
+
+        XCTAssertEqual(store.project.nodes.count, originalCount - 1)
+        XCTAssertNil(store.selectedNodeID)
+        XCTAssertFalse(store.project.nodes.contains(where: { $0.id == maskedNodeID }))
+
+        store.undo()
+
+        XCTAssertEqual(store.project.nodes.count, originalCount)
+        XCTAssertTrue(store.project.nodes.contains(where: { $0.id == maskedNodeID }))
+
+        store.redo()
+
+        XCTAssertEqual(store.project.nodes.count, originalCount - 1)
+        XCTAssertFalse(store.project.nodes.contains(where: { $0.id == maskedNodeID }))
     }
 
     func testMaskedImageContentTransformDoesNotChangeNodeTransform() {
@@ -913,7 +1008,32 @@ final class CanvasEditorCoreTests: XCTestCase {
                             offset: CanvasPoint(x: 24, y: -18),
                             rotation: 0.28,
                             scale: 1.24
-                        )
+                        ),
+                        deletesNodeOnDelete: false
+                    )
+                )
+            ]
+        )
+    }
+
+    private static var removableMaskedImageTemplate: CanvasTemplate {
+        CanvasTemplate(
+            id: "removable-masked-image-template",
+            name: "Removable Masked Image Template",
+            canvasSize: CanvasSize(width: 900, height: 1600),
+            background: .solid(CanvasColor(hex: "F7F4EF")),
+            nodes: [
+                CanvasNode(
+                    id: "removable-masked-node-0",
+                    kind: .maskedImage,
+                    name: "Removable Masked Slot",
+                    transform: CanvasTransform(position: CanvasPoint(x: 570, y: 602)),
+                    size: CanvasSize(width: 478, height: 712),
+                    zIndex: 0,
+                    source: .remoteURL("https://example.com/removable-masked.png"),
+                    maskedImage: CanvasMaskedImagePayload(
+                        maskSource: .bundleImage(named: "theme-mask-1"),
+                        deletesNodeOnDelete: true
                     )
                 )
             ]
