@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.1.0
+
 - added `deletesNodeOnDelete` to masked image payloads so masked slots can either clear only their photo content or remove the entire node when deleted
 - unified masked-slot delete behavior across the overlay `xmark` handle and toolbar delete action, while hiding delete affordances for empty persistent mask slots
 - increased the masked-slot photo add affordance and made its `+` icon scale from the displayed template size so it stays visible on downscaled canvases
