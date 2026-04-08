@@ -66,7 +66,8 @@ private struct CanvasEditorContainerView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let viewController = CanvasEditorViewController(
             input: input,
-            configuration: configuration
+            configuration: configuration,
+            mode: .fullscreen
         )
         viewController.delegate = context.coordinator
 

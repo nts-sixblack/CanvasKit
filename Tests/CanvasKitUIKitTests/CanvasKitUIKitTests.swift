@@ -281,6 +281,86 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertTrue(plusView.isHidden)
     }
 
+    @MainActor
+    func testFullscreenEditorKeepsNavigationButtons() {
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: .default
+        )
+
+        viewController.loadViewIfNeeded()
+
+        XCTAssertNotNil(viewController.navigationItem.leftBarButtonItem)
+        XCTAssertNotNil(viewController.navigationItem.rightBarButtonItem)
+    }
+
+    @MainActor
+    func testEmbeddedEditorDoesNotInstallNavigationButtons() {
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: .default,
+            mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+
+        XCTAssertNil(viewController.navigationItem.leftBarButtonItem)
+        XCTAssertNil(viewController.navigationItem.rightBarButtonItem)
+    }
+
+    @MainActor
+    func testEmbeddedExportReturnsPreviewImageAndProjectData() {
+        let expectation = expectation(description: "embedded export completes")
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: .default,
+            mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.exportCurrentCanvas { result in
+            switch result {
+            case .success(let output):
+                XCTAssertFalse(output.result.imageData.isEmpty)
+                XCTAssertFalse(output.result.projectData.isEmpty)
+                XCTAssertGreaterThan(output.previewImage.size.width, 0)
+                XCTAssertGreaterThan(output.previewImage.size.height, 0)
+            case .failure(let error):
+                XCTFail("Expected export to succeed, got \(error)")
+            }
+
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 5)
+    }
+
+    @MainActor
+    func testEmbeddedExportFailsWhenExportToolIsDisabled() {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.enabledTools.removeAll { $0 == .export }
+
+        let expectation = expectation(description: "embedded export fails")
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration,
+            mode: .embedded
+        )
+
+        viewController.exportCurrentCanvas { result in
+            switch result {
+            case .success:
+                XCTFail("Expected export to be disabled")
+            case .failure(let error):
+                XCTAssertEqual(error, .exportDisabled)
+            }
+
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1)
+    }
+
     private static func sampleImage() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 180, height: 180))
         return renderer.image { context in
@@ -345,6 +425,26 @@ final class CanvasKitUIKitTests: XCTestCase {
 
     private static func opaqueMaskImage(size: CGSize) -> UIImage {
         solidImage(color: .white, size: size)
+    }
+
+    private static var exportTemplate: CanvasTemplate {
+        CanvasTemplate(
+            id: "export-template",
+            name: "Export Template",
+            canvasSize: CanvasSize(width: 640, height: 640),
+            background: .solid(CanvasColor(hex: "122034")),
+            nodes: [
+                CanvasNode(
+                    kind: .text,
+                    name: "Title",
+                    transform: CanvasTransform(position: CanvasPoint(x: 320, y: 320)),
+                    size: CanvasSize(width: 360, height: 160),
+                    zIndex: 0,
+                    text: "CanvasKit",
+                    style: .defaultText
+                )
+            ]
+        )
     }
 
     private static func pixel(in image: UIImage, x: Int, y: Int) -> (r: UInt8, g: UInt8, b: UInt8, a: UInt8) {

@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `2.1.0`
+Current release: `2.2.0`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 
@@ -34,6 +34,7 @@ Add this repository to your app with Swift Package Manager, then import the prod
 
 ```swift
 import CanvasKitCore
+import CanvasKitUIKit
 import CanvasKitSwiftUI
 import SwiftUI
 
@@ -130,6 +131,44 @@ private enum Route: Hashable {
 `hostingStyle: .navigationStack` hides the outer SwiftUI navigation bar so the
 editor keeps using its own navigation chrome for close and export actions.
 
+Embed the editor inside an existing screen and trigger save from the host app:
+
+```swift
+import CanvasKitCore
+import CanvasKitSwiftUI
+import SwiftUI
+
+struct EmbeddedEditorHostView: View {
+    @State private var handle = CanvasEmbeddedEditorHandle()
+
+    let template: CanvasTemplate
+    let configuration: CanvasEditorConfiguration
+
+    var body: some View {
+        CanvasEmbeddedEditorView(
+            input: .template(template),
+            configuration: configuration,
+            handle: handle
+        )
+        .navigationTitle("Embedded Editor")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Save") {
+                    handle.exportCurrentCanvas { result in
+                        switch result {
+                        case .success(let output):
+                            print(output.result.projectData.count, output.previewImage.size)
+                        case .failure(let error):
+                            print(error.localizedDescription)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
 ### UIKit
 
 ```swift
@@ -165,6 +204,27 @@ final class HostViewController: UIViewController, CanvasEditorViewControllerDele
     ) {
         print(result.projectData.count, previewImage.size)
         dismiss(animated: true)
+    }
+}
+```
+
+To embed the UIKit controller as a child view controller, initialize it with
+`mode: .embedded` and call `exportCurrentCanvas(...)` from the host screen when
+you want to save:
+
+```swift
+let controller = CanvasEditorViewController(
+    input: .template(template),
+    configuration: configuration,
+    mode: .embedded
+)
+
+controller.exportCurrentCanvas { result in
+    switch result {
+    case .success(let output):
+        print(output.result.imageData.count, output.previewImage.size)
+    case .failure(let error):
+        print(error.localizedDescription)
     }
 }
 ```

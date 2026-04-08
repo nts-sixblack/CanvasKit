@@ -37,11 +37,6 @@ private enum CanvasEditorLoadingState {
     }
 }
 
-private enum CanvasEditorOperationError: Error, Sendable {
-    case pngEncodingFailed
-    case exportPreparationFailed
-}
-
 private enum BrushInspectorMode: Equatable {
     case create
     case edit
@@ -76,6 +71,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     public weak var delegate: CanvasEditorViewControllerDelegate?
 
     public let store: CanvasEditorStore
+    public let presentationMode: CanvasEditorPresentationMode
 
     private let stageView: CanvasStageView
     private let bottomPanel = UIView()
@@ -208,7 +204,15 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         store.configuration.signatures.store
     }
 
-    public init(input: CanvasEditorInput, configuration: CanvasEditorConfiguration = .default) {
+    private var usesNavigationChrome: Bool {
+        presentationMode == .fullscreen
+    }
+
+    public init(
+        input: CanvasEditorInput,
+        configuration: CanvasEditorConfiguration = .default,
+        mode: CanvasEditorPresentationMode = .fullscreen
+    ) {
         let resolvedStore: CanvasEditorStore
         let resolvedTitle: String
 
@@ -223,6 +227,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
         CanvasEditorUIRuntime.currentConfiguration = configuration
         store = resolvedStore
+        presentationMode = mode
         stageView = CanvasStageView()
         textInspectorView = CanvasTextInspectorView()
         brushInspectorView = CanvasBrushInspectorView()
@@ -253,13 +258,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         CanvasEditorFontRegistrar.registerFonts(from: store.configuration)
         view.backgroundColor = theme.canvasBackdrop
 
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            title: strings.closeButtonTitle,
-            style: .plain,
-            target: self,
-            action: #selector(closeTapped)
-        )
-        navigationItem.rightBarButtonItem = exportBarButtonItem
+        configureNavigationItems()
 
         stageView.store = store
         stageView.delegate = self
@@ -495,6 +494,22 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         updateLayerButtonAppearance()
         updateEraserButtonAppearance()
         updateVisibleInspector(animated: true)
+    }
+
+    private func configureNavigationItems() {
+        guard usesNavigationChrome else {
+            navigationItem.leftBarButtonItem = nil
+            navigationItem.rightBarButtonItem = nil
+            return
+        }
+
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            title: strings.closeButtonTitle,
+            style: .plain,
+            target: self,
+            action: #selector(closeTapped)
+        )
+        navigationItem.rightBarButtonItem = exportBarButtonItem
     }
 
     private var shouldShowPanelScrim: Bool {
@@ -1213,7 +1228,21 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func closeEditor() {
+        guard presentationMode == .fullscreen else {
+            return
+        }
         delegate?.canvasEditorViewControllerDidCancel(self)
+    }
+
+    public func exportCurrentCanvas(
+        completion: @escaping (Result<CanvasEditorExportOutput, CanvasEditorExportError>) -> Void
+    ) {
+        guard store.configuration.enabledTools.contains(.export) else {
+            completion(.failure(.exportDisabled))
+            return
+        }
+
+        performCanvasExport(completion: completion)
     }
 
     func canvasLayerPanelView(_ layerPanelView: CanvasLayerPanelView, didSelectNodeID nodeID: String) {
@@ -1502,15 +1531,32 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     @objc
     private func exportTapped() {
+        exportCurrentCanvas { [weak self] result in
+            guard let self else {
+                return
+            }
+
+            switch result {
+            case .success(let output):
+                self.delegate?.canvasEditorViewController(
+                    self,
+                    didExport: output.result,
+                    previewImage: output.previewImage
+                )
+            case .failure(let error):
+                self.presentErrorAlert(message: self.exportErrorMessage(for: error))
+            }
+        }
+    }
+
+    private func performCanvasExport(
+        completion: @escaping (Result<CanvasEditorExportOutput, CanvasEditorExportError>) -> Void
+    ) {
         let project = store.project
         let assetLoader = stageView.assetLoader
-        let exportPNGFailureMessage = strings.exportPNGFailureMessage
-        let exportImageFailureMessage = strings.exportImageFailureMessage
         setLoadingState(.exportingImage)
 
-        Task { [weak self] in
-            guard let self else { return }
-
+        Task { [self] in
             let exportSources = Self.exportAssetSources(from: project)
             await Task.detached(priority: .userInitiated) {
                 assetLoader.prefetchSynchronously(for: exportSources)
@@ -1522,14 +1568,25 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
                 }
             }
 
-            let result: Result<CanvasEditorResult, CanvasEditorOperationError> = autoreleasepool {
+            let result: Result<CanvasEditorExportOutput, CanvasEditorExportError> = autoreleasepool {
                 guard let imageData else {
-                    return .failure(CanvasEditorOperationError.pngEncodingFailed)
+                    return .failure(.pngEncodingFailed)
                 }
 
                 do {
                     let projectData = try Self.encodeProjectData(for: project, prettyPrinted: false)
-                    return .success(CanvasEditorResult(imageData: imageData, projectData: projectData))
+                    let exportResult = CanvasEditorResult(imageData: imageData, projectData: projectData)
+
+                    guard let previewImage = UIImage(data: imageData) else {
+                        return .failure(.previewImagePreparationFailed)
+                    }
+
+                    return .success(
+                        CanvasEditorExportOutput(
+                            result: exportResult,
+                            previewImage: previewImage
+                        )
+                    )
                 } catch {
                     return .failure(.exportPreparationFailed)
                 }
@@ -1537,25 +1594,17 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
             await MainActor.run {
                 self.setLoadingState(.none)
-
-                switch result {
-                case .success(let exportResult):
-                    guard let previewImage = UIImage(data: exportResult.imageData) else {
-                        self.presentErrorAlert(message: exportImageFailureMessage)
-                        return
-                    }
-                    self.delegate?.canvasEditorViewController(
-                        self,
-                        didExport: exportResult,
-                        previewImage: previewImage
-                    )
-                case .failure(let error):
-                    let message = error == .pngEncodingFailed
-                        ? exportPNGFailureMessage
-                        : exportImageFailureMessage
-                    self.presentErrorAlert(message: message)
-                }
+                completion(result)
             }
+        }
+    }
+
+    private func exportErrorMessage(for error: CanvasEditorExportError) -> String {
+        switch error {
+        case .pngEncodingFailed:
+            return strings.exportPNGFailureMessage
+        case .exportDisabled, .editorUnavailable, .exportPreparationFailed, .previewImagePreparationFailed:
+            return strings.exportImageFailureMessage
         }
     }
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.2.0
+
+- added `CanvasEditorPresentationMode`, `CanvasEditorExportOutput`, and `CanvasEditorExportError` so host apps can embed the editor runtime and trigger export programmatically
+- added `CanvasEmbeddedEditorView` and `CanvasEmbeddedEditorHandle` for SwiftUI hosts that need an embedded editor surface without fullscreen navigation chrome
+- unified fullscreen and programmatic export onto a shared export pipeline while keeping the existing fullscreen delegate flow intact
+- refreshed the example app with independent embedded editor demos and a multi-item export flow that merges edited outputs into a single PDF file
+
 ## 2.1.0
 
 - added `deletesNodeOnDelete` to masked image payloads so masked slots can either clear only their photo content or remove the entire node when deleted
