@@ -54,6 +54,13 @@ private enum VisibleInspectorKind {
     case eraser
 }
 
+private enum EmbeddedChromeLayoutState {
+    case toolbarAndHistory
+    case toolbarOnly
+    case historyOnly
+    case noBottomChrome
+}
+
 private enum PhotoImportTarget: Equatable, Sendable {
     case addImageNode
     case maskedNode(String)
@@ -102,6 +109,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var inspectorBottomConstraint: NSLayoutConstraint?
     private var inspectorHeightConstraint: NSLayoutConstraint?
     private var layerPanelHeightConstraint: NSLayoutConstraint?
+    private var stageBottomToHistoryConstraint: NSLayoutConstraint?
+    private var stageBottomToBottomPanelConstraint: NSLayoutConstraint?
+    private var stageBottomToSafeAreaConstraint: NSLayoutConstraint?
+    private var historyBottomToBottomPanelConstraint: NSLayoutConstraint?
+    private var historyBottomToSafeAreaConstraint: NSLayoutConstraint?
     private var isInspectorVisible = false
     private var isInspectorRequested = false
     private var toolInspectorMode: ToolInspectorMode?
@@ -172,18 +184,30 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         title: strings.deleteToolTitle,
         systemImage: icons.deleteTool
     )
-    private lazy var undoButton = makeHistoryButton(
-        title: strings.undoButtonTitle,
-        systemImage: icons.undo
-    )
-    private lazy var redoButton = makeHistoryButton(
-        title: strings.redoButtonTitle,
-        systemImage: icons.redo
-    )
-    private lazy var layersButton = makeHistoryButton(
-        title: strings.layersButtonTitle,
-        systemImage: icons.layers
-    )
+    private lazy var undoButton: UIButton = {
+        let button = makeHistoryButton(
+            title: strings.undoButtonTitle,
+            systemImage: icons.undo
+        )
+        button.accessibilityIdentifier = "canvas-editor-undo-button"
+        return button
+    }()
+    private lazy var redoButton: UIButton = {
+        let button = makeHistoryButton(
+            title: strings.redoButtonTitle,
+            systemImage: icons.redo
+        )
+        button.accessibilityIdentifier = "canvas-editor-redo-button"
+        return button
+    }()
+    private lazy var layersButton: UIButton = {
+        let button = makeHistoryButton(
+            title: strings.layersButtonTitle,
+            systemImage: icons.layers
+        )
+        button.accessibilityIdentifier = "canvas-editor-layers-button"
+        return button
+    }()
     private lazy var exportBarButtonItem: UIBarButtonItem = {
         let style: UIBarButtonItem.Style
         if #available(iOS 26.0, *) {
@@ -206,6 +230,58 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     private var usesNavigationChrome: Bool {
         presentationMode == .fullscreen
+    }
+
+    private var isEmbeddedPresentation: Bool {
+        presentationMode == .embedded
+    }
+
+    private var visibleToolbarToolDescriptors: [ToolbarToolDescriptor] {
+        toolbarToolDescriptors().filter { descriptor in
+            store.configuration.enabledTools.contains(descriptor.tool)
+                && (!descriptor.requiresSignatureStore || signatureStore != nil)
+                && (descriptor.tool != .filter || CanvasFilterProcessor.isAvailable)
+        }
+    }
+
+    private var showsEmbeddedUndoButton: Bool {
+        !isEmbeddedPresentation || store.configuration.enabledTools.contains(.undo)
+    }
+
+    private var showsEmbeddedRedoButton: Bool {
+        !isEmbeddedPresentation || store.configuration.enabledTools.contains(.redo)
+    }
+
+    private var showsEmbeddedLayersButton: Bool {
+        !isEmbeddedPresentation || store.configuration.features.showsEmbeddedLayersButton
+    }
+
+    private var installsBottomPanel: Bool {
+        !isEmbeddedPresentation || !visibleToolbarToolDescriptors.isEmpty
+    }
+
+    private var installsHistoryActionsContainer: Bool {
+        !isEmbeddedPresentation || showsEmbeddedUndoButton || showsEmbeddedRedoButton
+    }
+
+    private var embeddedChromeLayoutState: EmbeddedChromeLayoutState {
+        let hasToolbar = !visibleToolbarToolDescriptors.isEmpty
+        let hasHistory = showsEmbeddedUndoButton || showsEmbeddedRedoButton
+
+        switch (hasToolbar, hasHistory) {
+        case (true, true):
+            return .toolbarAndHistory
+        case (true, false):
+            return .toolbarOnly
+        case (false, true):
+            return .historyOnly
+        case (false, false):
+            return .noBottomChrome
+        }
+    }
+
+    private var stageToBottomChromeSpacing: CGFloat {
+        max(canvasToHistorySpacing, historyToBottomPanelSpacing)
     }
 
     public init(
@@ -286,11 +362,24 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func setupLayout() {
-        [stageView, bottomPanel, historyActionsContainer, layersButton, panelScrimView, inspectorContainerView, layerPanelView, loadingOverlayView].forEach {
+        var rootViews: [UIView] = [stageView]
+        if installsBottomPanel {
+            rootViews.append(bottomPanel)
+        }
+        if installsHistoryActionsContainer {
+            rootViews.append(historyActionsContainer)
+        }
+        if showsEmbeddedLayersButton {
+            rootViews.append(layersButton)
+        }
+        rootViews.append(contentsOf: [panelScrimView, inspectorContainerView, layerPanelView, loadingOverlayView])
+
+        rootViews.forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
 
+        bottomPanel.accessibilityIdentifier = "canvas-editor-bottom-panel"
         bottomPanel.backgroundColor = CanvasEditorTheme.cardSurface
         bottomPanel.layer.cornerRadius = 30
         bottomPanel.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
@@ -300,6 +389,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         bottomPanel.layer.shadowRadius = 22
         bottomPanel.layer.shadowOffset = CGSize(width: 0, height: -10)
 
+        historyActionsContainer.accessibilityIdentifier = "canvas-editor-history-container"
         historyActionsStack.translatesAutoresizingMaskIntoConstraints = false
         historyActionsStack.axis = .horizontal
         historyActionsStack.spacing = 12
@@ -324,13 +414,17 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         toolbarScrollView.alwaysBounceHorizontal = true
         toolbarScrollView.alwaysBounceVertical = false
         toolbarScrollView.isDirectionalLockEnabled = true
-        bottomPanel.addSubview(toolbarScrollView)
+        if installsBottomPanel {
+            bottomPanel.addSubview(toolbarScrollView)
+        }
 
         toolbarContentStack.translatesAutoresizingMaskIntoConstraints = false
         toolbarContentStack.axis = .horizontal
         toolbarContentStack.spacing = 10
         toolbarContentStack.alignment = .fill
-        toolbarScrollView.addSubview(toolbarContentStack)
+        if installsBottomPanel {
+            toolbarScrollView.addSubview(toolbarContentStack)
+        }
 
         textInspectorView.translatesAutoresizingMaskIntoConstraints = false
         brushInspectorView.translatesAutoresizingMaskIntoConstraints = false
@@ -356,40 +450,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         inspectorContainerView.layer.shadowRadius = 24
         inspectorContainerView.layer.shadowOffset = CGSize(width: 0, height: -10)
 
-        NSLayoutConstraint.activate([
+        var constraints: [NSLayoutConstraint] = [
             stageView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             stageView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             stageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            stageView.bottomAnchor.constraint(equalTo: historyActionsContainer.topAnchor, constant: -canvasToHistorySpacing),
-
-            bottomPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            bottomPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bottomPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
-            historyActionsContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            historyActionsContainer.bottomAnchor.constraint(equalTo: bottomPanel.topAnchor, constant: -historyToBottomPanelSpacing),
-
-            historyActionsStack.leadingAnchor.constraint(equalTo: historyActionsContainer.leadingAnchor),
-            historyActionsStack.trailingAnchor.constraint(equalTo: historyActionsContainer.trailingAnchor),
-            historyActionsStack.topAnchor.constraint(equalTo: historyActionsContainer.topAnchor),
-            historyActionsStack.bottomAnchor.constraint(equalTo: historyActionsContainer.bottomAnchor),
-
-            layersButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            layersButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -14),
-            layersButton.widthAnchor.constraint(equalToConstant: historyButtonSize),
-            layersButton.heightAnchor.constraint(equalToConstant: historyButtonSize),
-
-            toolbarScrollView.leadingAnchor.constraint(equalTo: bottomPanel.leadingAnchor, constant: 18),
-            toolbarScrollView.trailingAnchor.constraint(equalTo: bottomPanel.trailingAnchor, constant: -18),
-            toolbarScrollView.topAnchor.constraint(equalTo: bottomPanel.topAnchor, constant: 20),
-            toolbarScrollView.bottomAnchor.constraint(equalTo: bottomPanel.safeAreaLayoutGuide.bottomAnchor, constant: -12),
-            toolbarScrollView.heightAnchor.constraint(equalToConstant: toolbarTileHeight),
-
-            toolbarContentStack.leadingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.leadingAnchor),
-            toolbarContentStack.trailingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.trailingAnchor),
-            toolbarContentStack.topAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.topAnchor),
-            toolbarContentStack.bottomAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.bottomAnchor),
-            toolbarContentStack.heightAnchor.constraint(equalTo: toolbarScrollView.frameLayoutGuide.heightAnchor),
 
             inspectorContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inspectorContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -422,24 +486,85 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             loadingOverlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             loadingOverlayView.topAnchor.constraint(equalTo: view.topAnchor),
             loadingOverlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
+        ]
+
+        if installsBottomPanel {
+            stageBottomToBottomPanelConstraint = stageView.bottomAnchor.constraint(
+                equalTo: bottomPanel.topAnchor,
+                constant: -stageToBottomChromeSpacing
+            )
+            constraints.append(contentsOf: [
+                bottomPanel.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                bottomPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                bottomPanel.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+                toolbarScrollView.leadingAnchor.constraint(equalTo: bottomPanel.leadingAnchor, constant: 18),
+                toolbarScrollView.trailingAnchor.constraint(equalTo: bottomPanel.trailingAnchor, constant: -18),
+                toolbarScrollView.topAnchor.constraint(equalTo: bottomPanel.topAnchor, constant: 20),
+                toolbarScrollView.bottomAnchor.constraint(equalTo: bottomPanel.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+                toolbarScrollView.heightAnchor.constraint(equalToConstant: toolbarTileHeight),
+
+                toolbarContentStack.leadingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.leadingAnchor),
+                toolbarContentStack.trailingAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.trailingAnchor),
+                toolbarContentStack.topAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.topAnchor),
+                toolbarContentStack.bottomAnchor.constraint(equalTo: toolbarScrollView.contentLayoutGuide.bottomAnchor),
+                toolbarContentStack.heightAnchor.constraint(equalTo: toolbarScrollView.frameLayoutGuide.heightAnchor)
+            ])
+        }
+
+        if installsHistoryActionsContainer {
+            stageBottomToHistoryConstraint = stageView.bottomAnchor.constraint(
+                equalTo: historyActionsContainer.topAnchor,
+                constant: -canvasToHistorySpacing
+            )
+            historyBottomToSafeAreaConstraint = historyActionsContainer.bottomAnchor.constraint(
+                equalTo: view.safeAreaLayoutGuide.bottomAnchor,
+                constant: -historyToBottomPanelSpacing
+            )
+            constraints.append(contentsOf: [
+                historyActionsContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+
+                historyActionsStack.leadingAnchor.constraint(equalTo: historyActionsContainer.leadingAnchor),
+                historyActionsStack.trailingAnchor.constraint(equalTo: historyActionsContainer.trailingAnchor),
+                historyActionsStack.topAnchor.constraint(equalTo: historyActionsContainer.topAnchor),
+                historyActionsStack.bottomAnchor.constraint(equalTo: historyActionsContainer.bottomAnchor)
+            ])
+
+            if installsBottomPanel {
+                historyBottomToBottomPanelConstraint = historyActionsContainer.bottomAnchor.constraint(
+                    equalTo: bottomPanel.topAnchor,
+                    constant: -historyToBottomPanelSpacing
+                )
+            }
+        }
+
+        if showsEmbeddedLayersButton {
+            constraints.append(contentsOf: [
+                layersButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+                layersButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -14),
+                layersButton.widthAnchor.constraint(equalToConstant: historyButtonSize),
+                layersButton.heightAnchor.constraint(equalToConstant: historyButtonSize)
+            ])
+        }
+
+        stageBottomToSafeAreaConstraint = stageView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+
+        NSLayoutConstraint.activate(constraints)
+        applyEmbeddedChromeLayoutState()
     }
 
     private func setupToolbar() {
-        let visibleToolDescriptors = toolbarToolDescriptors().filter { descriptor in
-            store.configuration.enabledTools.contains(descriptor.tool)
-                && (!descriptor.requiresSignatureStore || signatureStore != nil)
-                && (descriptor.tool != .filter || CanvasFilterProcessor.isAvailable)
-        }
+        let visibleToolDescriptors = visibleToolbarToolDescriptors
 
         visibleToolDescriptors.forEach { descriptor in
             descriptor.button.addTarget(self, action: descriptor.action, for: .touchUpInside)
         }
 
         let historyButtons: [(UIButton, Selector)] = [
-            (undoButton, #selector(undoTapped)),
-            (redoButton, #selector(redoTapped))
+            showsEmbeddedUndoButton ? (undoButton, #selector(undoTapped)) : nil,
+            showsEmbeddedRedoButton ? (redoButton, #selector(redoTapped)) : nil
         ]
+        .compactMap { $0 }
 
         historyButtons.forEach { button, action in
             button.addTarget(self, action: action, for: .touchUpInside)
@@ -448,10 +573,65 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             historyActionsStack.addArrangedSubview(button)
         }
         exportBarButtonItem.isEnabled = store.configuration.enabledTools.contains(.export)
-        layersButton.addTarget(self, action: #selector(layersTapped), for: .touchUpInside)
+        if showsEmbeddedLayersButton {
+            layersButton.addTarget(self, action: #selector(layersTapped), for: .touchUpInside)
+        }
 
         visibleToolDescriptors.map(\.button).forEach { button in
             toolbarContentStack.addArrangedSubview(button)
+        }
+    }
+
+    private func applyEmbeddedChromeLayoutState() {
+        if !isEmbeddedPresentation {
+            bottomPanel.isHidden = false
+            historyActionsContainer.isHidden = false
+            layersButton.isHidden = false
+            stageBottomToHistoryConstraint?.isActive = true
+            stageBottomToBottomPanelConstraint?.isActive = false
+            stageBottomToSafeAreaConstraint?.isActive = false
+            historyBottomToBottomPanelConstraint?.isActive = true
+            historyBottomToSafeAreaConstraint?.isActive = false
+            return
+        }
+
+        let showsToolbar: Bool
+        let showsHistory: Bool
+
+        switch embeddedChromeLayoutState {
+        case .toolbarAndHistory:
+            showsToolbar = true
+            showsHistory = true
+        case .toolbarOnly:
+            showsToolbar = true
+            showsHistory = false
+        case .historyOnly:
+            showsToolbar = false
+            showsHistory = true
+        case .noBottomChrome:
+            showsToolbar = false
+            showsHistory = false
+        }
+
+        bottomPanel.isHidden = !showsToolbar
+        historyActionsContainer.isHidden = !showsHistory
+        layersButton.isHidden = !showsEmbeddedLayersButton
+
+        stageBottomToHistoryConstraint?.isActive = showsHistory
+        stageBottomToBottomPanelConstraint?.isActive = showsToolbar && !showsHistory
+        stageBottomToSafeAreaConstraint?.isActive = !showsToolbar && !showsHistory
+        historyBottomToBottomPanelConstraint?.isActive = showsToolbar && showsHistory
+        historyBottomToSafeAreaConstraint?.isActive = showsHistory && !showsToolbar
+
+        guard showsEmbeddedLayersButton else {
+            isLayerPanelVisible = false
+            layerPanelView.alpha = 0
+            layerPanelView.isHidden = true
+            layerPanelView.isUserInteractionEnabled = false
+            updateLayerButtonAppearance()
+            updatePanelScrimVisibility()
+            finalizePanelScrimIfNeeded()
+            return
         }
     }
 
@@ -603,8 +783,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         inspectorContainerView.isUserInteractionEnabled = !isBusy
         navigationItem.leftBarButtonItem?.isEnabled = !isBusy
         exportBarButtonItem.isEnabled = !isBusy && store.configuration.enabledTools.contains(.export)
-        layersButton.isEnabled = !isBusy
-        layerPanelView.isUserInteractionEnabled = !isBusy && isLayerPanelVisible
+        layersButton.isEnabled = !isBusy && showsEmbeddedLayersButton
+        layerPanelView.isUserInteractionEnabled = !isBusy && isLayerPanelVisible && showsEmbeddedLayersButton
 
         if isBusy {
             setLayerPanelVisible(false, animated: animated)
@@ -694,6 +874,17 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func setLayerPanelVisible(_ visible: Bool, animated: Bool) {
+        guard showsEmbeddedLayersButton else {
+            isLayerPanelVisible = false
+            layerPanelView.alpha = 0
+            layerPanelView.isHidden = true
+            layerPanelView.isUserInteractionEnabled = false
+            updateLayerButtonAppearance()
+            updatePanelScrimVisibility()
+            finalizePanelScrimIfNeeded()
+            return
+        }
+
         guard isLayerPanelVisible != visible || layerPanelView.isHidden != !visible else {
             return
         }
@@ -1516,6 +1707,9 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     @objc
     private func layersTapped() {
+        guard showsEmbeddedLayersButton else {
+            return
+        }
         dismissEditingOverlays(animated: true)
         setLayerPanelVisible(!isLayerPanelVisible, animated: true)
     }

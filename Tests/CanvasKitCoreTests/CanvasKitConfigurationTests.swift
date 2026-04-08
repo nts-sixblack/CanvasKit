@@ -55,7 +55,12 @@ final class CanvasKitConfigurationTests: XCTestCase {
         let strings = CanvasEditorStrings()
         let icons = CanvasEditorIconSet()
         let layout = CanvasEditorLayout()
-        let features = CanvasEditorFeatures(enabledTools: [.addText, .export])
+        let features = CanvasEditorFeatures(
+            enabledTools: [.addText, .export],
+            allowsColorPicker: false,
+            allowsLayerReordering: false,
+            showsEmbeddedLayersButton: false
+        )
 
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
@@ -80,6 +85,23 @@ final class CanvasKitConfigurationTests: XCTestCase {
             try decoder.decode(CanvasEditorFeatures.self, from: encoder.encode(features)),
             features
         )
+    }
+
+    func testFeaturesDecodeLegacyJSONWithEmbeddedLayersButtonDefaultingToTrue() throws {
+        let legacyJSON = """
+        {
+          "enabledTools": ["addText", "export"],
+          "allowsColorPicker": true,
+          "allowsLayerReordering": false
+        }
+        """.data(using: .utf8)!
+
+        let features = try JSONDecoder().decode(CanvasEditorFeatures.self, from: legacyJSON)
+
+        XCTAssertEqual(features.enabledTools, [.addText, .export])
+        XCTAssertTrue(features.allowsColorPicker)
+        XCTAssertFalse(features.allowsLayerReordering)
+        XCTAssertTrue(features.showsEmbeddedLayersButton)
     }
 
     func testSignatureToolIsAvailableInToolCatalog() {

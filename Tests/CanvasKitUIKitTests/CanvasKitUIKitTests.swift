@@ -309,6 +309,85 @@ final class CanvasKitUIKitTests: XCTestCase {
     }
 
     @MainActor
+    func testEmbeddedEditorOmitsHistoryButtonsWhenDisabledInEnabledTools() {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.enabledTools.removeAll { $0 == .undo || $0 == .redo }
+
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration,
+            mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+
+        XCTAssertNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-undo-button"))
+        XCTAssertNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-redo-button"))
+    }
+
+    @MainActor
+    func testEmbeddedEditorOmitsLayersButtonWhenFeatureFlagIsDisabled() {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.showsEmbeddedLayersButton = false
+
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration,
+            mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+
+        XCTAssertNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-layers-button"))
+    }
+
+    @MainActor
+    func testEmbeddedEditorCollapsesBottomToolbarWhenNoPrimaryToolsAreAvailable() throws {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.enabledTools = [.undo, .redo, .export]
+
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration,
+            mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        viewController.view.layoutIfNeeded()
+
+        XCTAssertNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-bottom-panel"))
+
+        let historyContainer = try XCTUnwrap(
+            Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-history-container")
+        )
+        XCTAssertFalse(historyContainer.isHidden)
+        XCTAssertEqual(
+            historyContainer.frame.maxY,
+            viewController.view.safeAreaLayoutGuide.layoutFrame.maxY - CGFloat(configuration.layout.historyToBottomPanelSpacing),
+            accuracy: 0.5
+        )
+    }
+
+    @MainActor
+    func testFullscreenEditorKeepsHistoryAndLayersChromeUnchanged() {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.enabledTools.removeAll { $0 == .undo || $0 == .redo }
+        configuration.features.showsEmbeddedLayersButton = false
+
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration
+        )
+
+        viewController.loadViewIfNeeded()
+
+        XCTAssertNotNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-undo-button"))
+        XCTAssertNotNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-redo-button"))
+        XCTAssertNotNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-layers-button"))
+    }
+
+    @MainActor
     func testEmbeddedExportReturnsPreviewImageAndProjectData() {
         let expectation = expectation(description: "embedded export completes")
         let viewController = CanvasEditorViewController(

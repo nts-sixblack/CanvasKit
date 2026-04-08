@@ -34,6 +34,7 @@
 ```swift
 var configuration = CanvasEditorConfiguration.default
 configuration.features.enabledTools = [.addText, .addImage, .addBrush, .export]
+configuration.features.showsEmbeddedLayersButton = false
 configuration.theme.accentColor = CanvasColor(hex: "006C67")
 configuration.theme.sheetTitleFont = .init(
     familyName: "Avenir Next",
@@ -68,6 +69,8 @@ configuration.features.enabledTools.append(.addSignature)
 
 `configuration.signatures.palette` defaults to `configuration.colors`.
 `configuration.signatures.store` is the shared source of truth, so multiple editor instances can reuse the same saved signatures when they receive the same store instance.
+In embedded presentations, `.undo` and `.redo` are now honored from `configuration.features.enabledTools`, and the bottom toolbar is automatically hidden when no primary toolbar tools are left after filtering.
+Set `configuration.features.showsEmbeddedLayersButton = false` to hide the embedded layers button while leaving fullscreen chrome unchanged.
 
 ## Legacy aliases
 

@@ -282,12 +282,23 @@ configuration.signatures = CanvasSignatureConfiguration(
     defaultColor: .black,
     defaultLineWidth: 4
 )
-configuration.features.enabledTools.append(.addSignature)
+configuration.features.enabledTools = [
+    .addText,
+    .addImage,
+    .addBrush,
+    .undo,
+    .redo,
+    .export,
+    .addSignature
+]
+configuration.features.showsEmbeddedLayersButton = false
 ```
 
 `configuration.templates` controls bundled and external template sources.
 `configuration.resources` controls which bundles are used for assets, fonts, and templates.
 `configuration.signatures` controls the shared signature library used by the signature tool. The tool is only shown when `.addSignature` is enabled and a signature store is configured.
+In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered, and the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
+Use `configuration.features.showsEmbeddedLayersButton = false` to hide the embedded layers button without affecting fullscreen editor chrome.
 
 ## Included Resources
 

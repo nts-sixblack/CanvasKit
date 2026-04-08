@@ -63,15 +63,41 @@ public struct CanvasEditorFeatures: Codable, Hashable, Sendable {
     public var enabledTools: [CanvasEditorTool]
     public var allowsColorPicker: Bool
     public var allowsLayerReordering: Bool
+    public var showsEmbeddedLayersButton: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case enabledTools
+        case allowsColorPicker
+        case allowsLayerReordering
+        case showsEmbeddedLayersButton
+    }
 
     public init(
         enabledTools: [CanvasEditorTool] = CanvasEditorTool.allCases,
         allowsColorPicker: Bool = true,
-        allowsLayerReordering: Bool = true
+        allowsLayerReordering: Bool = true,
+        showsEmbeddedLayersButton: Bool = true
     ) {
         self.enabledTools = enabledTools
         self.allowsColorPicker = allowsColorPicker
         self.allowsLayerReordering = allowsLayerReordering
+        self.showsEmbeddedLayersButton = showsEmbeddedLayersButton
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabledTools = try container.decode([CanvasEditorTool].self, forKey: .enabledTools)
+        allowsColorPicker = try container.decode(Bool.self, forKey: .allowsColorPicker)
+        allowsLayerReordering = try container.decode(Bool.self, forKey: .allowsLayerReordering)
+        showsEmbeddedLayersButton = try container.decodeIfPresent(Bool.self, forKey: .showsEmbeddedLayersButton) ?? true
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabledTools, forKey: .enabledTools)
+        try container.encode(allowsColorPicker, forKey: .allowsColorPicker)
+        try container.encode(allowsLayerReordering, forKey: .allowsLayerReordering)
+        try container.encode(showsEmbeddedLayersButton, forKey: .showsEmbeddedLayersButton)
     }
 }
 
