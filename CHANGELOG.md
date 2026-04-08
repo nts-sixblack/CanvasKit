@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.3.0
+
+- added embedded chrome controls so host apps can hide undo and redo via `configuration.features.enabledTools`
+- added `configuration.features.showsEmbeddedLayersButton` so embedded hosts can hide the floating layers button without affecting fullscreen mode
+- collapsed the embedded bottom toolbar automatically when no primary tools remain after runtime filtering
+- expanded configuration and UIKit coverage for embedded chrome visibility and backward-compatible config decoding
+
 ## 2.2.0
 
 - added `CanvasEditorPresentationMode`, `CanvasEditorExportOutput`, and `CanvasEditorExportError` so host apps can embed the editor runtime and trigger export programmatically
