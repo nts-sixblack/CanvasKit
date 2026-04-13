@@ -86,10 +86,6 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
     private let titleLabel = UILabel()
     private let dividerView = UIView()
     private let footerContainer = UIView()
-    private let selectedTitleLabel = UILabel()
-    private let selectedScrollView = UIScrollView()
-    private let selectedStackView = UIStackView()
-    private let emptySelectionLabel = UILabel()
     private let addButton = UIButton(type: .system)
     private let emptyStateLabel = UILabel()
     private var sheetBottomConstraint: NSLayoutConstraint?
@@ -188,23 +184,6 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
             shadowOffset: CGSize(width: 0, height: 8)
         )
 
-        selectedTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        selectedTitleLabel.font = CanvasEditorUIRuntime.currentConfiguration.theme.buttonFont.resolvedUIFont()
-        selectedTitleLabel.textColor = CanvasEditorTheme.primaryText
-
-        selectedScrollView.translatesAutoresizingMaskIntoConstraints = false
-        selectedScrollView.showsHorizontalScrollIndicator = false
-
-        selectedStackView.translatesAutoresizingMaskIntoConstraints = false
-        selectedStackView.axis = .horizontal
-        selectedStackView.spacing = 10
-        selectedScrollView.addSubview(selectedStackView)
-
-        emptySelectionLabel.translatesAutoresizingMaskIntoConstraints = false
-        emptySelectionLabel.font = CanvasEditorUIRuntime.currentConfiguration.theme.bodyFont.resolvedUIFont()
-        emptySelectionLabel.textColor = CanvasEditorTheme.secondaryText
-        emptySelectionLabel.text = CanvasEditorUIRuntime.currentConfiguration.strings.pickerTapToSelectMessage
-
         addButton.translatesAutoresizingMaskIntoConstraints = false
         addButton.configuration = {
             var configuration = UIButton.Configuration.filled()
@@ -226,7 +205,7 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         emptyStateLabel.isHidden = !items.isEmpty
 
         [closeButton, titleLabel, collectionView, emptyStateLabel, dividerView, footerContainer].forEach(sheetContainerView.addSubview)
-        [selectedTitleLabel, selectedScrollView, emptySelectionLabel, addButton].forEach(footerContainer.addSubview)
+        footerContainer.addSubview(addButton)
 
         sheetBottomConstraint = sheetContainerView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: hiddenSheetOffset)
         sheetBottomConstraint?.isActive = true
@@ -267,27 +246,9 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
             footerContainer.trailingAnchor.constraint(equalTo: sheetContainerView.trailingAnchor, constant: -18),
             footerContainer.bottomAnchor.constraint(equalTo: sheetContainerView.safeAreaLayoutGuide.bottomAnchor, constant: -14),
 
-            selectedTitleLabel.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 20),
-            selectedTitleLabel.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -20),
-            selectedTitleLabel.topAnchor.constraint(equalTo: footerContainer.topAnchor, constant: 14),
-
-            selectedScrollView.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 20),
-            selectedScrollView.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -20),
-            selectedScrollView.topAnchor.constraint(equalTo: selectedTitleLabel.bottomAnchor, constant: 10),
-            selectedScrollView.heightAnchor.constraint(equalToConstant: 58),
-
-            selectedStackView.leadingAnchor.constraint(equalTo: selectedScrollView.contentLayoutGuide.leadingAnchor),
-            selectedStackView.trailingAnchor.constraint(equalTo: selectedScrollView.contentLayoutGuide.trailingAnchor),
-            selectedStackView.topAnchor.constraint(equalTo: selectedScrollView.contentLayoutGuide.topAnchor),
-            selectedStackView.bottomAnchor.constraint(equalTo: selectedScrollView.contentLayoutGuide.bottomAnchor),
-            selectedStackView.heightAnchor.constraint(equalTo: selectedScrollView.frameLayoutGuide.heightAnchor),
-
-            emptySelectionLabel.leadingAnchor.constraint(equalTo: selectedScrollView.leadingAnchor),
-            emptySelectionLabel.centerYAnchor.constraint(equalTo: selectedScrollView.centerYAnchor),
-
             addButton.leadingAnchor.constraint(equalTo: footerContainer.leadingAnchor, constant: 20),
             addButton.trailingAnchor.constraint(equalTo: footerContainer.trailingAnchor, constant: -20),
-            addButton.topAnchor.constraint(equalTo: selectedScrollView.bottomAnchor, constant: 14),
+            addButton.topAnchor.constraint(equalTo: footerContainer.topAnchor, constant: 16),
             addButton.heightAnchor.constraint(equalToConstant: 52),
             addButton.bottomAnchor.constraint(equalTo: footerContainer.bottomAnchor, constant: -16)
         ])
@@ -315,11 +276,6 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
 
     private func updateSelectionUI() {
         let strings = CanvasEditorUIRuntime.currentConfiguration.strings
-        selectedTitleLabel.text = selectedItemIDs.isEmpty
-            ? strings.pickerSelectedTitle
-            : "\(strings.pickerSelectedTitle) (\(selectedItemIDs.count))"
-        emptySelectionLabel.isHidden = !selectedItemIDs.isEmpty
-
         var configuration = addButton.configuration
         configuration?.title = selectedItemIDs.isEmpty
             ? strings.pickerAddButtonTitle
@@ -328,65 +284,8 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         addButton.isEnabled = !selectedItemIDs.isEmpty
         addButton.alpha = selectedItemIDs.isEmpty ? 0.55 : 1
 
-        selectedStackView.arrangedSubviews.forEach { subview in
-            selectedStackView.removeArrangedSubview(subview)
-            subview.removeFromSuperview()
-        }
-
-        selectedItems().forEach { item in
-            selectedStackView.addArrangedSubview(makeSelectedItemButton(for: item))
-        }
-
         emptyStateLabel.isHidden = !items.isEmpty
         collectionView.isHidden = items.isEmpty
-    }
-
-    private func makeSelectedItemButton(for item: CanvasInsertPickerItem) -> UIButton {
-        let button = UIButton(type: .custom)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.widthAnchor.constraint(equalToConstant: 58).isActive = true
-        button.heightAnchor.constraint(equalToConstant: 58).isActive = true
-        button.backgroundColor = CanvasEditorTheme.cardSurface
-        button.layer.cornerRadius = 18
-        button.layer.cornerCurve = .continuous
-        button.layer.borderColor = CanvasEditorTheme.separator.cgColor
-        button.layer.borderWidth = 1
-        button.clipsToBounds = true
-        button.tintColor = CanvasEditorTheme.primaryText
-        button.accessibilityIdentifier = item.id
-        button.addAction(UIAction { [weak self] _ in
-            self?.toggleSelection(for: item.id)
-        }, for: .touchUpInside)
-
-        switch item.preview {
-        case .emoji(let emoji):
-            button.setTitle(emoji, for: .normal)
-            button.titleLabel?.font = CanvasEditorUIRuntime.currentConfiguration.theme.inspectorTitleFont.resolvedUIFont()
-            button.setTitleColor(.label, for: .normal)
-
-        case .asset(let source):
-            let imageView = UIImageView()
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            imageView.contentMode = .scaleAspectFit
-            imageView.isUserInteractionEnabled = false
-            imageView.image = assetLoader.imageSynchronously(for: source)
-            button.addSubview(imageView)
-            NSLayoutConstraint.activate([
-                imageView.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 10),
-                imageView.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -10),
-                imageView.topAnchor.constraint(equalTo: button.topAnchor, constant: 10),
-                imageView.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -10)
-            ])
-            assetLoader.image(for: source) { [weak button] image in
-                guard button?.accessibilityIdentifier == item.id else {
-                    return
-                }
-                let imageView = button?.subviews.compactMap { $0 as? UIImageView }.first
-                imageView?.image = image
-            }
-        }
-
-        return button
     }
 
     private func toggleSelection(for itemID: String) {
