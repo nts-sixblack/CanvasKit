@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.3.1
+
+- removed the insert picker selected-items footer since selection is already visible on each tile
+
 ## 2.3.0
 
 - added embedded chrome controls so host apps can hide undo and redo via `configuration.features.enabledTools`
