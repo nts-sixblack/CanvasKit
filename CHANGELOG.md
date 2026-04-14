@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.4.0
+
 - updated the floating Layers button to hide (and auto-dismiss the panel) when the canvas has fewer than 2 nodes
 - updated the emoji picker to show keyboard-style categories with sticky section headers backed by `CanvasEmojiCatalog` and bundled `emoji-test.txt`
 - updated inline image sources to encode transparent images as PNG (opaque images may use JPEG) and restricted inline editing to text nodes
