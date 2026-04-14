@@ -419,7 +419,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     func beginInlineEditingForSelectedNode(placeCursorAtEnd: Bool = true) {
         guard let node = store?.selectedNode,
               node.isEditable,
-              node.kind == .text || node.kind == .emoji else {
+              node.kind == .text else {
             return
         }
         editingNodeID = node.id
@@ -542,8 +542,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
     private func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
         let location = gestureRecognizer.location(in: canvasContainerView)
         let tappedNode = hitTestNode(at: location)
-        let tappedSelectedTextNode = tappedNode?.id == store?.selectedNodeID &&
-            (tappedNode?.kind == .text || tappedNode?.kind == .emoji)
+        let tappedSelectedTextNode = tappedNode?.id == store?.selectedNodeID && tappedNode?.kind == .text
         let tappedSelectedShapeNode = tappedNode?.id == store?.selectedNodeID && tappedNode?.kind == .shape
         let tappedEmptyMaskedImageNode = tappedNode?.kind == .maskedImage && tappedNode?.source == nil
 
@@ -568,7 +567,7 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             return
         }
         store?.selectNode(node.id)
-        if node.kind == .text || node.kind == .emoji {
+        if node.kind == .text {
             beginInlineEditingForSelectedNode()
         }
     }
@@ -1285,13 +1284,13 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         guard let editingNodeID,
               let store,
               let node = store.project.nodes.first(where: { $0.id == editingNodeID }),
-              node.kind == .text || node.kind == .emoji else {
+              node.kind == .text else {
             inlineTextView.isHidden = true
             activeEditingStyle = nil
             return
         }
 
-        let style = node.style ?? (node.kind == .emoji ? .defaultEmoji : .defaultText)
+        let style = node.style ?? .defaultText
         let targetSize = CGSize(
             width: max(node.size.width - (textContentInset * 2), 40),
             height: max(node.size.height - (textContentInset * 2), 30)

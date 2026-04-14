@@ -55,13 +55,20 @@ struct CanvasInsertPickerItem: Hashable, Identifiable {
     let preview: Preview
 }
 
+struct CanvasInsertPickerSection: Identifiable {
+    let id: String
+    let title: String?
+    let items: [CanvasInsertPickerItem]
+}
+
 final class CanvasInsertPickerSheetViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     private let hiddenSheetOffset: CGFloat = 900
     private let mode: CanvasInsertPickerMode
-    private let items: [CanvasInsertPickerItem]
+    private let sections: [CanvasInsertPickerSection]
     private let assetLoader: CanvasAssetLoader
     private let onConfirm: ([CanvasInsertPickerItem]) -> Void
     private let itemsByID: [String: CanvasInsertPickerItem]
+    private let indexPathByID: [String: IndexPath]
     private let scrimView = UIControl()
     private let sheetContainerView = UIView()
 
@@ -69,6 +76,7 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         let layout = UICollectionViewFlowLayout()
         layout.minimumLineSpacing = 14
         layout.minimumInteritemSpacing = 12
+        layout.sectionHeadersPinToVisibleBounds = mode == .emoji
 
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.translatesAutoresizingMaskIntoConstraints = false
@@ -77,6 +85,11 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         collectionView.showsVerticalScrollIndicator = false
         collectionView.contentInset = UIEdgeInsets(top: 4, left: 0, bottom: 24, right: 0)
         collectionView.register(CanvasInsertPickerCell.self, forCellWithReuseIdentifier: CanvasInsertPickerCell.reuseIdentifier)
+        collectionView.register(
+            CanvasInsertPickerSectionHeaderView.self,
+            forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+            withReuseIdentifier: CanvasInsertPickerSectionHeaderView.reuseIdentifier
+        )
         collectionView.dataSource = self
         collectionView.delegate = self
         return collectionView
@@ -99,15 +112,27 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
 
     init(
         mode: CanvasInsertPickerMode,
-        items: [CanvasInsertPickerItem],
+        sections: [CanvasInsertPickerSection],
         assetLoader: CanvasAssetLoader,
         onConfirm: @escaping ([CanvasInsertPickerItem]) -> Void
     ) {
         self.mode = mode
-        self.items = items
+        self.sections = sections
         self.assetLoader = assetLoader
         self.onConfirm = onConfirm
-        self.itemsByID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+
+        var itemsByID: [String: CanvasInsertPickerItem] = [:]
+        var indexPathByID: [String: IndexPath] = [:]
+
+        for (sectionIndex, section) in sections.enumerated() {
+            for (itemIndex, item) in section.items.enumerated() where itemsByID[item.id] == nil {
+                itemsByID[item.id] = item
+                indexPathByID[item.id] = IndexPath(item: itemIndex, section: sectionIndex)
+            }
+        }
+
+        self.itemsByID = itemsByID
+        self.indexPathByID = indexPathByID
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -202,7 +227,7 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         emptyStateLabel.textColor = CanvasEditorTheme.secondaryText
         emptyStateLabel.textAlignment = .center
         emptyStateLabel.text = mode.emptyStateMessage
-        emptyStateLabel.isHidden = !items.isEmpty
+        emptyStateLabel.isHidden = !sections.allSatisfy { $0.items.isEmpty }
 
         [closeButton, titleLabel, collectionView, emptyStateLabel, dividerView, footerContainer].forEach(sheetContainerView.addSubview)
         footerContainer.addSubview(addButton)
@@ -284,8 +309,9 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         addButton.isEnabled = !selectedItemIDs.isEmpty
         addButton.alpha = selectedItemIDs.isEmpty ? 0.55 : 1
 
-        emptyStateLabel.isHidden = !items.isEmpty
-        collectionView.isHidden = items.isEmpty
+        let isCatalogEmpty = sections.allSatisfy { $0.items.isEmpty }
+        emptyStateLabel.isHidden = !isCatalogEmpty
+        collectionView.isHidden = isCatalogEmpty
     }
 
     private func toggleSelection(for itemID: String) {
@@ -295,8 +321,8 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
             selectedItemIDs.append(itemID)
         }
 
-        if let itemIndex = items.firstIndex(where: { $0.id == itemID }) {
-            collectionView.reloadItems(at: [IndexPath(item: itemIndex, section: 0)])
+        if let indexPath = indexPathByID[itemID] {
+            collectionView.reloadItems(at: [indexPath])
         }
     }
 
@@ -322,7 +348,11 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
     }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        items.count
+        sections[section].items.count
+    }
+
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        sections.count
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
@@ -333,7 +363,7 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
             return UICollectionViewCell()
         }
 
-        let item = items[indexPath.item]
+        let item = sections[indexPath.section].items[indexPath.item]
         cell.configure(
             with: item,
             mode: mode,
@@ -345,7 +375,30 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: false)
-        toggleSelection(for: items[indexPath.item].id)
+        toggleSelection(for: sections[indexPath.section].items[indexPath.item].id)
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        viewForSupplementaryElementOfKind kind: String,
+        at indexPath: IndexPath
+    ) -> UICollectionReusableView {
+        guard kind == UICollectionView.elementKindSectionHeader else {
+            return UICollectionReusableView()
+        }
+
+        guard let header = collectionView.dequeueReusableSupplementaryView(
+            ofKind: kind,
+            withReuseIdentifier: CanvasInsertPickerSectionHeaderView.reuseIdentifier,
+            for: indexPath
+        ) as? CanvasInsertPickerSectionHeaderView else {
+            return UICollectionReusableView()
+        }
+
+        header.configure(
+            title: mode == .emoji ? sections[indexPath.section].title : nil
+        )
+        return header
     }
 
     func collectionView(
@@ -358,6 +411,56 @@ final class CanvasInsertPickerSheetViewController: UIViewController, UICollectio
         let availableWidth = collectionView.bounds.width - (spacing * (columns - 1))
         let side = floor(availableWidth / columns)
         return CGSize(width: side, height: side)
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        referenceSizeForHeaderInSection section: Int
+    ) -> CGSize {
+        guard mode == .emoji else {
+            return .zero
+        }
+
+        guard let title = sections[section].title, !title.isEmpty else {
+            return .zero
+        }
+
+        return CGSize(width: collectionView.bounds.width, height: 24)
+    }
+}
+
+private final class CanvasInsertPickerSectionHeaderView: UICollectionReusableView {
+    static let reuseIdentifier = "CanvasInsertPickerSectionHeaderView"
+
+    private let titleLabel = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        backgroundColor = CanvasEditorTheme.sheetSurface
+
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.font = CanvasEditorUIRuntime.currentConfiguration.theme.sectionTitleFont.resolvedUIFont()
+        titleLabel.textColor = CanvasEditorTheme.secondaryText
+        titleLabel.textAlignment = .left
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(title: String?) {
+        titleLabel.text = title
+        isHidden = title == nil
     }
 }
 
@@ -471,25 +574,31 @@ private final class CanvasInsertPickerCell: UICollectionViewCell {
 }
 
 enum CanvasInsertPickerCatalog {
-    static let emojiItems: [CanvasInsertPickerItem] = [
-        "😁", "😀", "😄", "😊", "☺️",
-        "😉", "😍", "😘", "😚", "😗",
-        "😙", "😜", "😝", "😛", "😳",
-        "😌", "😔", "😒", "😕", "😟",
-        "😣", "😭", "😂", "😢", "😥",
-        "😰", "😅", "😓", "😩", "😫",
-        "😨", "😱", "😠", "😡", "😤",
-        "😖", "😆", "😷", "😴", "😵",
-        "😲", "😮", "😈", "👿", "😦"
-    ].enumerated().map { index, emoji in
-        CanvasInsertPickerItem(
-            id: "emoji-\(index)",
-            title: emoji,
-            preview: .emoji(emoji)
+    static let emojiSections: [CanvasInsertPickerSection] = CanvasEmojiCatalog.keyboardCategories().map { category in
+        CanvasInsertPickerSection(
+            id: "emoji-\(category.id)",
+            title: category.title,
+            items: category.emojis.map { emoji in
+                CanvasInsertPickerItem(
+                    id: emoji,
+                    title: emoji,
+                    preview: .emoji(emoji)
+                )
+            }
         )
     }
 
-    static func stickerItems(from descriptors: [CanvasStickerDescriptor]) -> [CanvasInsertPickerItem] {
+    static func stickerSections(from descriptors: [CanvasStickerDescriptor]) -> [CanvasInsertPickerSection] {
+        [
+            CanvasInsertPickerSection(
+                id: "stickers",
+                title: nil,
+                items: stickerItems(from: descriptors)
+            )
+        ]
+    }
+
+    private static func stickerItems(from descriptors: [CanvasStickerDescriptor]) -> [CanvasInsertPickerItem] {
         if descriptors.isEmpty {
             return fallbackStickerItems()
         }

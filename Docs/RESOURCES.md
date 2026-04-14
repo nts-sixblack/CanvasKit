@@ -27,6 +27,13 @@ configuration.fonts = CanvasFontCatalog(
 
 CanvasKit registers those files once per process from `configuration.resources.fontBundles`.
 
+## Emoji
+
+CanvasKit bundles Unicode emoji keyboard data (`emoji-test.txt`, Emoji 16.0) inside the SwiftPM module bundle.
+`CanvasEmojiCatalog.keyboardCategories()` loads and parses this resource from `Bundle.module` to provide keyboard-style emoji categories for the emoji picker UI.
+
+Unicode terms of use: https://www.unicode.org/terms_of_use.html
+
 ## Images
 
 `CanvasAssetSource` supports:
@@ -37,3 +44,4 @@ CanvasKit registers those files once per process from `configuration.resources.f
 - `.inlineImage(data:mimeType:)`
 
 For `bundleImage`, CanvasKit checks every bundle in `assetBundles`.
+For `inlineImage`, prefer `image/png` when the asset contains transparency and `image/jpeg` for opaque images to keep payload size down.

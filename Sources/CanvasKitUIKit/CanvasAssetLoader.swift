@@ -220,7 +220,7 @@ private extension UIImage {
             CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
         )
 
-        var pixels = [UInt8](repeating: 255, count: sampleHeight * bytesPerRow)
+        var pixels = [UInt8](repeating: 0, count: sampleHeight * bytesPerRow)
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
             return true
         }
@@ -240,6 +240,7 @@ private extension UIImage {
             }
 
             context.interpolationQuality = .low
+            context.setBlendMode(.copy)
             context.draw(
                 cgImage!,
                 in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight)

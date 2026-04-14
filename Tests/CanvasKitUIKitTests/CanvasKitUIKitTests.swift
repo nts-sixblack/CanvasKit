@@ -34,6 +34,37 @@ final class CanvasKitUIKitTests: XCTestCase {
         }
     }
 
+    func testInlineSourceEncodesTransparentImagesAsPNG() {
+        let size = CGSize(width: 120, height: 80)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let image = renderer.image { context in
+            context.cgContext.clear(CGRect(origin: .zero, size: size))
+            UIColor.black.setFill()
+            context.fill(CGRect(x: 40, y: 20, width: 40, height: 40))
+        }
+
+        let assetLoader = CanvasAssetLoader()
+        guard let source = assetLoader.inlineSource(from: image) else {
+            XCTFail("Expected inline source")
+            return
+        }
+
+        XCTAssertEqual(source.mimeType, "image/png")
+
+        guard let encoded = source.dataBase64,
+              let data = Data(base64Encoded: encoded),
+              let decoded = UIImage(data: data) else {
+            XCTFail("Expected inline image data")
+            return
+        }
+
+        XCTAssertEqual(Self.pixel(in: decoded, x: 0, y: 0).a, 0)
+        XCTAssertEqual(Self.pixel(in: decoded, x: 60, y: 40).a, 255)
+    }
+
     func testRendererAppliesCanvasFilterToRenderedProject() {
         let project = CanvasProject(
             templateID: "filter-render",
@@ -438,6 +469,77 @@ final class CanvasKitUIKitTests: XCTestCase {
         }
 
         wait(for: [expectation], timeout: 1)
+    }
+
+    @MainActor
+    func testLayersButtonHiddenUnlessAtLeastTwoLayers() {
+        func assertLayersButtonHidden(_ project: CanvasProject, isHidden expectedHidden: Bool, file: StaticString = #filePath, line: UInt = #line) {
+            let viewController = CanvasEditorViewController(
+                input: .project(project),
+                configuration: .default,
+                mode: .fullscreen
+            )
+            viewController.loadViewIfNeeded()
+
+            guard let button = Self.findSubview(
+                in: viewController.view,
+                accessibilityIdentifier: "canvas-editor-layers-button"
+            ) as? UIButton else {
+                XCTFail("Expected to find layers button", file: file, line: line)
+                return
+            }
+
+            XCTAssertEqual(button.isHidden, expectedHidden, file: file, line: line)
+        }
+
+        assertLayersButtonHidden(Self.layersTestProject(nodeCount: 0), isHidden: true)
+        assertLayersButtonHidden(Self.layersTestProject(nodeCount: 1), isHidden: true)
+        assertLayersButtonHidden(Self.layersTestProject(nodeCount: 2), isHidden: false)
+    }
+
+    @MainActor
+    func testLayersButtonHidesWhenProjectDropsBelowTwoLayers() {
+        let viewController = CanvasEditorViewController(
+            input: .project(Self.layersTestProject(nodeCount: 2)),
+            configuration: .default,
+            mode: .fullscreen
+        )
+        viewController.loadViewIfNeeded()
+
+        guard let button = Self.findSubview(
+            in: viewController.view,
+            accessibilityIdentifier: "canvas-editor-layers-button"
+        ) as? UIButton else {
+            XCTFail("Expected to find layers button")
+            return
+        }
+
+        XCTAssertFalse(button.isHidden)
+
+        viewController.store.replaceProject(Self.layersTestProject(nodeCount: 1))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+
+        XCTAssertTrue(button.isHidden)
+    }
+
+    private static func layersTestProject(nodeCount: Int) -> CanvasProject {
+        let nodes = (0..<nodeCount).map { index in
+            CanvasNode(
+                kind: .text,
+                name: "Node \(index)",
+                transform: CanvasTransform(position: CanvasPoint(x: 50, y: 50)),
+                size: CanvasSize(width: 60, height: 30),
+                zIndex: index,
+                text: "Test \(index)",
+                style: .defaultText
+            )
+        }
+        return CanvasProject(
+            templateID: "layers-ui-test-\(nodeCount)",
+            canvasSize: CanvasSize(width: 100, height: 100),
+            background: .solid(.white),
+            nodes: nodes
+        )
     }
 
     private static func sampleImage() -> UIImage {

@@ -256,6 +256,14 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         !isEmbeddedPresentation || store.configuration.features.showsEmbeddedLayersButton
     }
 
+    private var hasAtLeastTwoLayers: Bool {
+        store.project.nodes.count >= 2
+    }
+
+    private var canShowLayersUI: Bool {
+        showsEmbeddedLayersButton && hasAtLeastTwoLayers
+    }
+
     private var installsBottomPanel: Bool {
         !isEmbeddedPresentation || !visibleToolbarToolDescriptors.isEmpty
     }
@@ -586,12 +594,22 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         if !isEmbeddedPresentation {
             bottomPanel.isHidden = false
             historyActionsContainer.isHidden = false
-            layersButton.isHidden = false
+            layersButton.isHidden = !canShowLayersUI
             stageBottomToHistoryConstraint?.isActive = true
             stageBottomToBottomPanelConstraint?.isActive = false
             stageBottomToSafeAreaConstraint?.isActive = false
             historyBottomToBottomPanelConstraint?.isActive = true
             historyBottomToSafeAreaConstraint?.isActive = false
+
+            if !canShowLayersUI {
+                isLayerPanelVisible = false
+                layerPanelView.alpha = 0
+                layerPanelView.isHidden = true
+                layerPanelView.isUserInteractionEnabled = false
+                updateLayerButtonAppearance()
+                updatePanelScrimVisibility()
+                finalizePanelScrimIfNeeded()
+            }
             return
         }
 
@@ -615,7 +633,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
         bottomPanel.isHidden = !showsToolbar
         historyActionsContainer.isHidden = !showsHistory
-        layersButton.isHidden = !showsEmbeddedLayersButton
+        layersButton.isHidden = !canShowLayersUI
 
         stageBottomToHistoryConstraint?.isActive = showsHistory
         stageBottomToBottomPanelConstraint?.isActive = showsToolbar && !showsHistory
@@ -623,7 +641,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         historyBottomToBottomPanelConstraint?.isActive = showsToolbar && showsHistory
         historyBottomToSafeAreaConstraint?.isActive = showsHistory && !showsToolbar
 
-        guard showsEmbeddedLayersButton else {
+        guard canShowLayersUI else {
             isLayerPanelVisible = false
             layerPanelView.alpha = 0
             layerPanelView.isHidden = true
@@ -664,6 +682,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private func refreshChrome() {
         layerPanelView.apply(nodes: store.layerPanelNodes, selectedNodeID: store.selectedNodeID)
         updateLayerPanelHeight()
+
+        layersButton.isHidden = !canShowLayersUI
+        if !canShowLayersUI {
+            setLayerPanelVisible(false, animated: false)
+        }
 
         let hasSelection = store.selectedNode != nil
         duplicateButton.isEnabled = hasSelection
@@ -783,8 +806,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         inspectorContainerView.isUserInteractionEnabled = !isBusy
         navigationItem.leftBarButtonItem?.isEnabled = !isBusy
         exportBarButtonItem.isEnabled = !isBusy && store.configuration.enabledTools.contains(.export)
-        layersButton.isEnabled = !isBusy && showsEmbeddedLayersButton
-        layerPanelView.isUserInteractionEnabled = !isBusy && isLayerPanelVisible && showsEmbeddedLayersButton
+        layersButton.isEnabled = !isBusy && canShowLayersUI
+        layerPanelView.isUserInteractionEnabled = !isBusy && isLayerPanelVisible && canShowLayersUI
 
         if isBusy {
             setLayerPanelVisible(false, animated: animated)
@@ -850,7 +873,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
             }
         }
 
-        guard let node = store.selectedNode, node.kind == .text || node.kind == .emoji else {
+        guard let node = store.selectedNode, node.kind == .text else {
             isInspectorRequested = false
             return .none
         }
@@ -874,7 +897,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func setLayerPanelVisible(_ visible: Bool, animated: Bool) {
-        guard showsEmbeddedLayersButton else {
+        guard canShowLayersUI else {
             isLayerPanelVisible = false
             layerPanelView.alpha = 0
             layerPanelView.isHidden = true
@@ -1116,16 +1139,19 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func applyTextStyleMutation(_ mutation: (inout CanvasTextStyle) -> Void) {
+        guard store.selectedNode?.kind == .text else {
+            return
+        }
         store.updateSelectedTextStyle(mutation)
         stageView.ensureSelectedTextFitsHeight()
     }
 
     private func presentTextColorPicker(for target: CanvasTextInspectorColorTarget) {
-        guard let node = store.selectedNode, node.kind == .text || node.kind == .emoji else {
+        guard let node = store.selectedNode, node.kind == .text else {
             return
         }
 
-        let style = node.style ?? (node.kind == .emoji ? .defaultEmoji : .defaultText)
+        let style = node.style ?? .defaultText
         let picker = UIColorPickerViewController()
         picker.delegate = self
         picker.supportsAlpha = true
@@ -1183,7 +1209,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private func presentEmojiPrompt() {
         let picker = CanvasInsertPickerSheetViewController(
             mode: .emoji,
-            items: CanvasInsertPickerCatalog.emojiItems,
+            sections: CanvasInsertPickerCatalog.emojiSections,
             assetLoader: stageView.assetLoader
         ) { [weak self] items in
             guard let self else { return }
@@ -1201,7 +1227,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private func presentStickerPicker() {
         let picker = CanvasInsertPickerSheetViewController(
             mode: .sticker,
-            items: CanvasInsertPickerCatalog.stickerItems(from: store.configuration.stickerCatalog),
+            sections: CanvasInsertPickerCatalog.stickerSections(from: store.configuration.stickerCatalog),
             assetLoader: stageView.assetLoader
         ) { [weak self] items in
             guard let self else { return }
@@ -1505,7 +1531,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     func canvasStageViewDidTapSelectedTextNode(_ stageView: CanvasStageView) {
-        guard let node = store.selectedNode, node.kind == .text || node.kind == .emoji, !isInlineEditingText else {
+        guard let node = store.selectedNode, node.kind == .text, !isInlineEditingText else {
             return
         }
         cancelActiveToolMode()
@@ -1707,7 +1733,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
 
     @objc
     private func layersTapped() {
-        guard showsEmbeddedLayersButton else {
+        guard canShowLayersUI else {
             return
         }
         dismissEditingOverlays(animated: true)
