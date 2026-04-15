@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.4.1
+
+- collapsed the fullscreen bottom toolbar automatically when no primary tools remain after runtime filtering
+
 ## 2.4.0
 
 - updated the floating Layers button to hide (and auto-dismiss the panel) when the canvas has fewer than 2 nodes

@@ -65,6 +65,7 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertEqual(Self.pixel(in: decoded, x: 60, y: 40).a, 255)
     }
 
+    @MainActor
     func testRendererAppliesCanvasFilterToRenderedProject() {
         let project = CanvasProject(
             templateID: "filter-render",
@@ -90,6 +91,7 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertNotEqual(exportImage.pngData(), baseImage.pngData())
     }
 
+    @MainActor
     func testMaskedImageRendererClipsPixelsOutsideMask() {
         let contentImage = Self.solidImage(color: .red, size: CGSize(width: 120, height: 120))
         let maskImage = Self.leftHalfMaskImage(size: CGSize(width: 120, height: 120))
@@ -119,6 +121,7 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertEqual(Self.pixel(in: renderedImage, x: 96, y: 60).a, 0)
     }
 
+    @MainActor
     func testMaskedImageRendererContentTransformChangesOutput() {
         let contentImage = Self.splitImage(
             leftColor: UIColor(red: 0.96, green: 0.42, blue: 0.18, alpha: 1),
@@ -167,6 +170,7 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertNotEqual(defaultImage.pngData(), transformedImage.pngData())
     }
 
+    @MainActor
     func testMaskedImageRendererClipsTransformedContentToOpaqueMaskBounds() {
         let contentImage = Self.solidImage(
             color: UIColor(red: 0.18, green: 0.58, blue: 0.92, alpha: 1),
@@ -205,6 +209,7 @@ final class CanvasKitUIKitTests: XCTestCase {
         XCTAssertEqual(Self.pixel(in: renderedImage, x: 140, y: 140).a, 0)
     }
 
+    @MainActor
     func testMaskedImageRendererMatchesNodeViewSnapshotForBundledMask() {
         let assetLoader = CanvasAssetLoader()
         let contentImage = Self.quadrantImage(size: CGSize(width: 320, height: 420))
@@ -243,17 +248,14 @@ final class CanvasKitUIKitTests: XCTestCase {
             view.layer.render(in: context.cgContext)
         }
 
-        XCTAssertEqual(
-            Self.pixel(in: rendererImage, x: 180, y: 180),
-            Self.pixel(in: viewImage, x: 180, y: 180)
+        XCTAssertTrue(
+            Self.pixel(in: rendererImage, x: 180, y: 180) == Self.pixel(in: viewImage, x: 180, y: 180)
         )
-        XCTAssertEqual(
-            Self.pixel(in: rendererImage, x: 420, y: 560),
-            Self.pixel(in: viewImage, x: 420, y: 560)
+        XCTAssertTrue(
+            Self.pixel(in: rendererImage, x: 420, y: 560) == Self.pixel(in: viewImage, x: 420, y: 560)
         )
-        XCTAssertEqual(
-            Self.pixel(in: rendererImage, x: 130, y: 640),
-            Self.pixel(in: viewImage, x: 130, y: 640)
+        XCTAssertTrue(
+            Self.pixel(in: rendererImage, x: 130, y: 640) == Self.pixel(in: viewImage, x: 130, y: 640)
         )
     }
 
@@ -381,6 +383,33 @@ final class CanvasKitUIKitTests: XCTestCase {
             input: .template(Self.exportTemplate),
             configuration: configuration,
             mode: .embedded
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        viewController.view.layoutIfNeeded()
+
+        XCTAssertNil(Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-bottom-panel"))
+
+        let historyContainer = try XCTUnwrap(
+            Self.findSubview(in: viewController.view, accessibilityIdentifier: "canvas-editor-history-container")
+        )
+        XCTAssertFalse(historyContainer.isHidden)
+        XCTAssertEqual(
+            historyContainer.frame.maxY,
+            viewController.view.safeAreaLayoutGuide.layoutFrame.maxY - CGFloat(configuration.layout.historyToBottomPanelSpacing),
+            accuracy: 0.5
+        )
+    }
+
+    @MainActor
+    func testFullscreenEditorCollapsesBottomToolbarWhenNoPrimaryToolsAreAvailable() throws {
+        var configuration = CanvasEditorConfiguration.default
+        configuration.features.enabledTools = []
+
+        let viewController = CanvasEditorViewController(
+            input: .template(Self.exportTemplate),
+            configuration: configuration
         )
 
         viewController.loadViewIfNeeded()

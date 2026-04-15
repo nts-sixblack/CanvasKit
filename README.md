@@ -297,7 +297,7 @@ configuration.features.showsEmbeddedLayersButton = false
 `configuration.templates` controls bundled and external template sources.
 `configuration.resources` controls which bundles are used for assets, fonts, and templates.
 `configuration.signatures` controls the shared signature library used by the signature tool. The tool is only shown when `.addSignature` is enabled and a signature store is configured.
-In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered, and the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
+In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered. In both embedded and fullscreen presentations, the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the panel auto-dismisses if it was open.
 Use `configuration.features.showsEmbeddedLayersButton = false` to always hide the embedded layers button without affecting fullscreen editor chrome.
 

@@ -54,13 +54,6 @@ private enum VisibleInspectorKind {
     case eraser
 }
 
-private enum EmbeddedChromeLayoutState {
-    case toolbarAndHistory
-    case toolbarOnly
-    case historyOnly
-    case noBottomChrome
-}
-
 private enum PhotoImportTarget: Equatable, Sendable {
     case addImageNode
     case maskedNode(String)
@@ -265,27 +258,11 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private var installsBottomPanel: Bool {
-        !isEmbeddedPresentation || !visibleToolbarToolDescriptors.isEmpty
+        !visibleToolbarToolDescriptors.isEmpty
     }
 
     private var installsHistoryActionsContainer: Bool {
         !isEmbeddedPresentation || showsEmbeddedUndoButton || showsEmbeddedRedoButton
-    }
-
-    private var embeddedChromeLayoutState: EmbeddedChromeLayoutState {
-        let hasToolbar = !visibleToolbarToolDescriptors.isEmpty
-        let hasHistory = showsEmbeddedUndoButton || showsEmbeddedRedoButton
-
-        switch (hasToolbar, hasHistory) {
-        case (true, true):
-            return .toolbarAndHistory
-        case (true, false):
-            return .toolbarOnly
-        case (false, true):
-            return .historyOnly
-        case (false, false):
-            return .noBottomChrome
-        }
     }
 
     private var stageToBottomChromeSpacing: CGFloat {
@@ -591,45 +568,8 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     private func applyEmbeddedChromeLayoutState() {
-        if !isEmbeddedPresentation {
-            bottomPanel.isHidden = false
-            historyActionsContainer.isHidden = false
-            layersButton.isHidden = !canShowLayersUI
-            stageBottomToHistoryConstraint?.isActive = true
-            stageBottomToBottomPanelConstraint?.isActive = false
-            stageBottomToSafeAreaConstraint?.isActive = false
-            historyBottomToBottomPanelConstraint?.isActive = true
-            historyBottomToSafeAreaConstraint?.isActive = false
-
-            if !canShowLayersUI {
-                isLayerPanelVisible = false
-                layerPanelView.alpha = 0
-                layerPanelView.isHidden = true
-                layerPanelView.isUserInteractionEnabled = false
-                updateLayerButtonAppearance()
-                updatePanelScrimVisibility()
-                finalizePanelScrimIfNeeded()
-            }
-            return
-        }
-
-        let showsToolbar: Bool
-        let showsHistory: Bool
-
-        switch embeddedChromeLayoutState {
-        case .toolbarAndHistory:
-            showsToolbar = true
-            showsHistory = true
-        case .toolbarOnly:
-            showsToolbar = true
-            showsHistory = false
-        case .historyOnly:
-            showsToolbar = false
-            showsHistory = true
-        case .noBottomChrome:
-            showsToolbar = false
-            showsHistory = false
-        }
+        let showsToolbar = installsBottomPanel
+        let showsHistory = installsHistoryActionsContainer
 
         bottomPanel.isHidden = !showsToolbar
         historyActionsContainer.isHidden = !showsHistory
