@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 2.4.2
+
+- added custom brush color picking through the system color picker when `configuration.features.allowsColorPicker` is enabled
+- added default borders to visible color swatches so light colors such as white remain distinguishable in inspector palettes
+
 ## 2.4.1
 
 - collapsed the fullscreen bottom toolbar automatically when no primary tools remain after runtime filtering

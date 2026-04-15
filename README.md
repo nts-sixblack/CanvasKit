@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `2.4.0`
+Current release: `2.4.2`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 
@@ -297,6 +297,8 @@ configuration.features.showsEmbeddedLayersButton = false
 `configuration.templates` controls bundled and external template sources.
 `configuration.resources` controls which bundles are used for assets, fonts, and templates.
 `configuration.signatures` controls the shared signature library used by the signature tool. The tool is only shown when `.addSignature` is enabled and a signature store is configured.
+`configuration.features.allowsColorPicker` controls whether the system color picker is available alongside palette swatches for text, brush, and signature color selection.
+Visible color swatches include a default border so light colors such as white stay legible against the editor chrome.
 In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered. In both embedded and fullscreen presentations, the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the panel auto-dismisses if it was open.
 Use `configuration.features.showsEmbeddedLayersButton = false` to always hide the embedded layers button without affecting fullscreen editor chrome.

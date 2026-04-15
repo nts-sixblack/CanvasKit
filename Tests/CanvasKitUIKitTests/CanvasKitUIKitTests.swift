@@ -92,6 +92,71 @@ final class CanvasKitUIKitTests: XCTestCase {
     }
 
     @MainActor
+    func testInspectorColorChipAddsDefaultBorderToVisibleSwatches() throws {
+        let button = InspectorColorChipButton()
+        button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+
+        button.configure(kind: .color(.white))
+        button.layoutIfNeeded()
+
+        let swatchView = try XCTUnwrap(Self.findColorChipSwatch(in: button))
+        XCTAssertEqual(swatchView.layer.borderWidth, 1, accuracy: 0.001)
+        XCTAssertTrue(Self.colorsMatch(swatchView.layer.borderColor, CanvasEditorTheme.separator.cgColor))
+
+        button.configure(kind: .picker)
+        button.setDisplayedColor(.white)
+        button.layoutIfNeeded()
+
+        XCTAssertEqual(swatchView.layer.borderWidth, 1, accuracy: 0.001)
+        XCTAssertTrue(Self.colorsMatch(swatchView.layer.borderColor, CanvasEditorTheme.separator.cgColor))
+
+        button.setDisplayedColor(nil)
+        button.layoutIfNeeded()
+
+        XCTAssertEqual(swatchView.layer.borderWidth, 0, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testBrushInspectorPickerChipRequestsColorPickerAndTracksCustomColor() throws {
+        let brushInspectorView = CanvasBrushInspectorView()
+        let delegate = BrushInspectorDelegateSpy()
+        brushInspectorView.delegate = delegate
+        brushInspectorView.frame = CGRect(x: 0, y: 0, width: 320, height: 280)
+        brushInspectorView.configure(
+            palette: [.black, CanvasColor(red: 0.12, green: 0.38, blue: 0.94, alpha: 1)],
+            showsColorPicker: true
+        )
+
+        let customColor = CanvasColor(red: 0.98, green: 0.98, blue: 0.98, alpha: 1)
+        brushInspectorView.apply(
+            configuration: CanvasBrushConfiguration(
+                type: .brush,
+                strokeWidth: 18,
+                opacity: 1,
+                color: customColor
+            )
+        )
+        brushInspectorView.layoutIfNeeded()
+
+        let pickerButton = try XCTUnwrap(
+            Self.findSubview(
+                in: brushInspectorView,
+                accessibilityIdentifier: "canvas-brush-color-picker-button"
+            ) as? UIButton
+        )
+        XCTAssertTrue(pickerButton.isSelected)
+
+        pickerButton.sendActions(for: .touchUpInside)
+        XCTAssertTrue(delegate.didRequestColorPicker)
+
+        let updatedColor = CanvasColor(red: 0.25, green: 0.50, blue: 0.75, alpha: 1)
+        brushInspectorView.applySelectedColor(updatedColor)
+
+        XCTAssertEqual(delegate.lastConfiguration?.color, updatedColor)
+        XCTAssertTrue(pickerButton.isSelected)
+    }
+
+    @MainActor
     func testMaskedImageRendererClipsPixelsOutsideMask() {
         let contentImage = Self.solidImage(color: .red, size: CGSize(width: 120, height: 120))
         let maskImage = Self.leftHalfMaskImage(size: CGSize(width: 120, height: 120))
@@ -709,6 +774,60 @@ final class CanvasKitUIKitTests: XCTestCase {
         }
 
         return nil
+    }
+
+    private static func findColorChipSwatch(in button: UIButton) -> UIView? {
+        button.subviews.first { subview in
+            abs(subview.bounds.width - 34) < 0.001 &&
+            abs(subview.bounds.height - 34) < 0.001 &&
+            abs(subview.layer.cornerRadius - 17) < 0.001
+        }
+    }
+
+    private static func colorsMatch(_ lhs: CGColor?, _ rhs: CGColor) -> Bool {
+        guard let lhs,
+              let lhsComponents = UIColor(cgColor: lhs).rgbaComponents,
+              let rhsComponents = UIColor(cgColor: rhs).rgbaComponents else {
+            return false
+        }
+
+        return abs(lhsComponents.red - rhsComponents.red) < 0.001 &&
+            abs(lhsComponents.green - rhsComponents.green) < 0.001 &&
+            abs(lhsComponents.blue - rhsComponents.blue) < 0.001 &&
+            abs(lhsComponents.alpha - rhsComponents.alpha) < 0.001
+    }
+}
+
+private extension UIColor {
+    var rgbaComponents: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat)? {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return nil
+        }
+
+        return (red, green, blue, alpha)
+    }
+}
+
+@MainActor
+private final class BrushInspectorDelegateSpy: CanvasBrushInspectorViewDelegate {
+    private(set) var didRequestColorPicker = false
+    private(set) var lastConfiguration: CanvasBrushConfiguration?
+
+    func canvasBrushInspectorViewDidCancel(_ brushInspectorView: CanvasBrushInspectorView) {}
+
+    func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didChange configuration: CanvasBrushConfiguration) {
+        lastConfiguration = configuration
+    }
+
+    func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didConfirm configuration: CanvasBrushConfiguration) {}
+
+    func canvasBrushInspectorViewDidRequestColorPicker(_ brushInspectorView: CanvasBrushInspectorView) {
+        didRequestColorPicker = true
     }
 }
 #endif

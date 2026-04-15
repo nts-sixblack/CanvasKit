@@ -54,6 +54,11 @@ private enum VisibleInspectorKind {
     case eraser
 }
 
+private enum ActiveColorPickerTarget {
+    case text(CanvasTextInspectorColorTarget)
+    case brush
+}
+
 private enum PhotoImportTarget: Equatable, Sendable {
     case addImageNode
     case maskedNode(String)
@@ -117,7 +122,7 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     private var hasCanvasChanges = false
     private var loadingState: CanvasEditorLoadingState = .none
     private var currentVisibleInspectorKind: VisibleInspectorKind = .none
-    private var activeTextColorPickerTarget: CanvasTextInspectorColorTarget?
+    private var activeColorPickerTarget: ActiveColorPickerTarget?
     private var committedBrushConfiguration = CanvasBrushConfiguration.defaultValue {
         didSet {
             guard isViewLoaded else {
@@ -326,7 +331,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         textInspectorView.delegate = self
         textInspectorView.configure(fontFamilies: store.configuration.fontCatalog, palette: store.configuration.colorPalette)
         brushInspectorView.delegate = self
-        brushInspectorView.configure(palette: store.configuration.colorPalette)
+        brushInspectorView.configure(
+            palette: store.configuration.colorPalette,
+            showsColorPicker: store.configuration.features.allowsColorPicker
+        )
         eraserInspectorView.delegate = self
         layerPanelView.delegate = self
 
@@ -1097,7 +1105,21 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         picker.supportsAlpha = true
         picker.selectedColor = selectedColor(for: target, in: style)
 
-        activeTextColorPickerTarget = target
+        activeColorPickerTarget = .text(target)
+        present(picker, animated: true)
+    }
+
+    private func presentBrushColorPicker() {
+        guard case .brush = toolInspectorMode,
+              let configuration = brushDraftConfiguration else {
+            return
+        }
+
+        let picker = UIColorPickerViewController()
+        picker.delegate = self
+        picker.supportsAlpha = true
+        picker.selectedColor = configuration.color.uiColor
+        activeColorPickerTarget = .brush
         present(picker, animated: true)
     }
 
@@ -1454,6 +1476,10 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         }
     }
 
+    func canvasBrushInspectorViewDidRequestColorPicker(_ brushInspectorView: CanvasBrushInspectorView) {
+        presentBrushColorPicker()
+    }
+
     func canvasEraserInspectorViewDidCancel(_ eraserInspectorView: CanvasEraserInspectorView) {
         dismissInspector(animated: true)
     }
@@ -1610,14 +1636,18 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
     }
 
     public func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
-        guard let activeTextColorPickerTarget else {
-            return
+        switch activeColorPickerTarget {
+        case .text(let target):
+            applySelectedPickerColor(viewController.selectedColor, for: target)
+        case .brush:
+            brushInspectorView.applySelectedColor(CanvasColor(uiColor: viewController.selectedColor))
+        case .none:
+            break
         }
-        applySelectedPickerColor(viewController.selectedColor, for: activeTextColorPickerTarget)
     }
 
     public func colorPickerViewControllerDidFinish(_ viewController: UIColorPickerViewController) {
-        activeTextColorPickerTarget = nil
+        activeColorPickerTarget = nil
     }
 
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {

@@ -69,6 +69,8 @@ configuration.features.enabledTools.append(.addSignature)
 
 `configuration.signatures.palette` defaults to `configuration.colors`.
 `configuration.signatures.store` is the shared source of truth, so multiple editor instances can reuse the same saved signatures when they receive the same store instance.
+`configuration.features.allowsColorPicker` enables the system color picker in text, brush, and signature color inspectors in addition to the configured palette.
+Visible swatches keep a default border so light colors such as white remain distinguishable against the editor surfaces.
 In embedded presentations, `.undo` and `.redo` are now honored from `configuration.features.enabledTools`. In both embedded and fullscreen presentations, the bottom toolbar is automatically hidden when no primary toolbar tools are left after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the layer panel auto-dismisses if it was open.
 Set `configuration.features.showsEmbeddedLayersButton = false` to hide the embedded layers button while leaving fullscreen chrome unchanged.

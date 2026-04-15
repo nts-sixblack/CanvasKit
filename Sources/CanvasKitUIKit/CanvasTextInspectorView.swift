@@ -663,6 +663,7 @@ protocol CanvasBrushInspectorViewDelegate: AnyObject {
     func canvasBrushInspectorViewDidCancel(_ brushInspectorView: CanvasBrushInspectorView)
     func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didChange configuration: CanvasBrushConfiguration)
     func canvasBrushInspectorView(_ brushInspectorView: CanvasBrushInspectorView, didConfirm configuration: CanvasBrushConfiguration)
+    func canvasBrushInspectorViewDidRequestColorPicker(_ brushInspectorView: CanvasBrushInspectorView)
 }
 
 @MainActor
@@ -686,7 +687,7 @@ final class CanvasBrushInspectorView: UIView {
     private let titleLabel = UILabel()
     private let confirmButton = UIButton(type: .system)
     private let shapeStack = UIStackView()
-    private let colorStack = UIStackView()
+    private let colorStripView = InspectorBrushColorStripView()
     private let sizeRow = InspectorSliderRow(
         title: CanvasEditorUIRuntime.currentConfiguration.strings.brushSizeRowTitle,
         range: 4...48
@@ -701,10 +702,9 @@ final class CanvasBrushInspectorView: UIView {
     )
     private lazy var colorSectionView = section(
         title: CanvasEditorUIRuntime.currentConfiguration.strings.brushColorSectionTitle,
-        contentView: colorStack
+        contentView: colorStripView
     )
 
-    private var palette: [CanvasColor] = []
     private var isApplyingState = false
     private var shapeButtons: [CanvasShapeType: UIButton] = [:]
     private var currentConfiguration = CanvasBrushConfiguration.defaultValue
@@ -737,14 +737,19 @@ final class CanvasBrushInspectorView: UIView {
             self.currentConfiguration.opacity = value
             self.notifyConfigurationDidChange()
         }
+        colorStripView.onSelectColor = { [weak self] color in
+            guard let self, !self.isApplyingState else { return }
+            self.currentConfiguration.color = color
+            self.notifyConfigurationDidChange()
+        }
+        colorStripView.onRequestPicker = { [weak self] in
+            guard let self else { return }
+            self.delegate?.canvasBrushInspectorViewDidRequestColorPicker(self)
+        }
 
         contentStack.addArrangedSubview(shapeSectionView)
         contentStack.addArrangedSubview(sizeRow)
         contentStack.addArrangedSubview(opacityRow)
-
-        colorStack.axis = .horizontal
-        colorStack.spacing = 10
-        colorStack.distribution = .fillEqually
         contentStack.addArrangedSubview(colorSectionView)
 
         NSLayoutConstraint.activate([
@@ -766,9 +771,8 @@ final class CanvasBrushInspectorView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(palette: [CanvasColor]) {
-        self.palette = palette
-        rebuildPalette()
+    func configure(palette: [CanvasColor], showsColorPicker: Bool) {
+        colorStripView.configure(palette: palette, showsColorPicker: showsColorPicker)
         apply(configuration: currentConfiguration)
         invalidateContentLayout()
     }
@@ -779,9 +783,15 @@ final class CanvasBrushInspectorView: UIView {
         sizeRow.value = configuration.strokeWidth
         opacityRow.value = configuration.opacity
         updateShapeSelection(selectedType: configuration.type)
-        updatePaletteSelection(selectedColor: configuration.color)
+        colorStripView.applySelection(color: configuration.color)
         isApplyingState = false
         invalidateContentLayout()
+    }
+
+    func applySelectedColor(_ color: CanvasColor) {
+        currentConfiguration.color = color
+        colorStripView.applySelection(color: color)
+        notifyConfigurationDidChange()
     }
 
     func preferredHeight(for width: CGFloat, maximumHeight: CGFloat) -> CGFloat {
@@ -859,29 +869,6 @@ final class CanvasBrushInspectorView: UIView {
         }
     }
 
-    private func rebuildPalette() {
-        colorStack.arrangedSubviews.forEach {
-            colorStack.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
-
-        palette.forEach { color in
-            let button = UIButton(type: .system)
-            button.backgroundColor = color.uiColor
-            button.layer.cornerRadius = 18
-            button.layer.borderWidth = 2
-            button.layer.borderColor = CanvasEditorTheme.separator.cgColor
-            button.heightAnchor.constraint(equalToConstant: 36).isActive = true
-            button.addAction(UIAction { [weak self] _ in
-                guard let self else { return }
-                self.currentConfiguration.color = color
-                self.updatePaletteSelection(selectedColor: color)
-                self.notifyConfigurationDidChange()
-            }, for: .touchUpInside)
-            colorStack.addArrangedSubview(button)
-        }
-    }
-
     private func updateShapeSelection(selectedType: CanvasShapeType) {
         shapeButtons.forEach { type, button in
             let isSelected = type == selectedType
@@ -890,17 +877,6 @@ final class CanvasBrushInspectorView: UIView {
             button.configuration?.background.strokeColor = isSelected
                 ? CanvasEditorTheme.accent.withAlphaComponent(0.28)
                 : CanvasEditorTheme.separator
-        }
-    }
-
-    private func updatePaletteSelection(selectedColor: CanvasColor) {
-        for (index, subview) in colorStack.arrangedSubviews.enumerated() {
-            guard let button = subview as? UIButton, palette.indices.contains(index) else {
-                continue
-            }
-            button.layer.borderColor = palette[index] == selectedColor
-                ? CanvasEditorTheme.accent.cgColor
-                : CanvasEditorTheme.separator.cgColor
         }
     }
 
@@ -951,6 +927,114 @@ final class CanvasBrushInspectorView: UIView {
 
     private func notifyConfigurationDidChange() {
         delegate?.canvasBrushInspectorView(self, didChange: currentConfiguration)
+    }
+}
+
+private final class InspectorBrushColorStripView: UIView {
+    enum AccessibilityIdentifier {
+        static let pickerButton = "canvas-brush-color-picker-button"
+    }
+
+    var onSelectColor: ((CanvasColor) -> Void)?
+    var onRequestPicker: (() -> Void)?
+
+    private let scrollView = UIScrollView()
+    private let stackView = UIStackView()
+    private let pickerButton = InspectorColorChipButton()
+    private var paletteButtons: [CanvasColor: InspectorColorChipButton] = [:]
+    private var palette: [CanvasColor] = []
+    private var showsColorPicker = true
+    private var selectedColor: CanvasColor = .white
+    private var customColor: CanvasColor?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        addSubview(scrollView)
+
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        stackView.axis = .horizontal
+        stackView.spacing = 12
+        scrollView.addSubview(stackView)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            stackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            stackView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            stackView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+        ])
+
+        pickerButton.configure(kind: .picker)
+        pickerButton.accessibilityIdentifier = AccessibilityIdentifier.pickerButton
+        pickerButton.accessibilityLabel = "Pick brush color"
+        pickerButton.addAction(UIAction { [weak self] _ in
+            self?.onRequestPicker?()
+        }, for: .touchUpInside)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(palette: [CanvasColor], showsColorPicker: Bool) {
+        self.palette = palette
+        self.showsColorPicker = showsColorPicker
+        rebuildButtons()
+    }
+
+    func applySelection(color: CanvasColor) {
+        let previousShowsPicker = shouldShowPickerButton
+        selectedColor = color
+        customColor = palette.contains(color) ? nil : color
+
+        if previousShowsPicker != shouldShowPickerButton {
+            rebuildButtons()
+        }
+
+        pickerButton.isSelected = customColor != nil
+        pickerButton.setDisplayedColor(customColor?.uiColor)
+
+        for (paletteColor, button) in paletteButtons {
+            button.isSelected = paletteColor == color
+        }
+    }
+
+    private var shouldShowPickerButton: Bool {
+        showsColorPicker || customColor != nil
+    }
+
+    private func rebuildButtons() {
+        paletteButtons.removeAll()
+        stackView.arrangedSubviews.forEach {
+            stackView.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+
+        if shouldShowPickerButton {
+            stackView.addArrangedSubview(pickerButton)
+        }
+
+        palette.forEach { color in
+            let button = InspectorColorChipButton()
+            button.configure(kind: .color(color.uiColor))
+            button.accessibilityLabel = "Brush color"
+            button.addAction(UIAction { [weak self] _ in
+                self?.applySelection(color: color)
+                self?.onSelectColor?(color)
+            }, for: .touchUpInside)
+            paletteButtons[color] = button
+            stackView.addArrangedSubview(button)
+        }
     }
 }
 

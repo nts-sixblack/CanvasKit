@@ -21,6 +21,10 @@ extension UIColor {
 }
 
 final class InspectorColorChipButton: UIButton {
+    private enum Layout {
+        static let swatchBorderWidth: CGFloat = 1
+    }
+
     enum Kind {
         case color(UIColor)
         case clear
@@ -101,6 +105,8 @@ final class InspectorColorChipButton: UIButton {
         switch kind {
         case .color(let color):
             swatchView.backgroundColor = color
+            swatchView.layer.borderWidth = Layout.swatchBorderWidth
+            swatchView.layer.borderColor = CanvasEditorTheme.separator.cgColor
             ringView.backgroundColor = .clear
             ringView.layer.borderColor = isSelected ? CanvasEditorTheme.accent.cgColor : UIColor.clear.cgColor
             iconView.image = isSelected
@@ -110,6 +116,8 @@ final class InspectorColorChipButton: UIButton {
 
         case .clear:
             swatchView.backgroundColor = CanvasEditorTheme.cardSurface
+            swatchView.layer.borderWidth = 0
+            swatchView.layer.borderColor = UIColor.clear.cgColor
             ringView.backgroundColor = isSelected ? CanvasEditorTheme.accentMuted : CanvasEditorTheme.canvasBackdrop
             ringView.layer.borderColor = isSelected ? CanvasEditorTheme.accent.cgColor : CanvasEditorTheme.separator.cgColor
             iconView.image = isSelected
@@ -120,6 +128,10 @@ final class InspectorColorChipButton: UIButton {
         case .picker:
             let resolvedColor = displayedColor ?? CanvasEditorTheme.canvasBackdrop
             swatchView.backgroundColor = resolvedColor
+            swatchView.layer.borderWidth = displayedColor == nil ? 0 : Layout.swatchBorderWidth
+            swatchView.layer.borderColor = displayedColor == nil
+                ? UIColor.clear.cgColor
+                : CanvasEditorTheme.separator.cgColor
             ringView.backgroundColor = isSelected ? CanvasEditorTheme.accentMuted : CanvasEditorTheme.cardSurface
             ringView.layer.borderColor = isSelected ? CanvasEditorTheme.accent.cgColor : CanvasEditorTheme.separator.cgColor
             iconView.image = UIImage(
