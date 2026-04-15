@@ -30,6 +30,7 @@ final class CanvasNodeView: UIView {
     private var resolvedMaskedContentLayout: CanvasResolvedMaskedImageLayout?
     private var isMaskedImageEditingSelected = false
     private var usesMaskedPlaceholderStyle = false
+    var showsMaskedEmptyAffordance = true
     var viewportScale: CGFloat = 1 {
         didSet {
             guard oldValue != viewportScale else {
@@ -278,7 +279,7 @@ final class CanvasNodeView: UIView {
 
         applyMaskedPlaceholderStyle()
         placeholderView.isHidden = false
-        let showsEmptyAffordance = node.source == nil
+        let showsEmptyAffordance = node.source == nil && showsMaskedEmptyAffordance
         placeholderLabel.text = showsEmptyAffordance
             ? ""
             : CanvasEditorUIRuntime.currentConfiguration.strings.imageLoadingTitle

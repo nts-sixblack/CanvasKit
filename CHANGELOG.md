@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.4.3
+
+- simplified the signature editor composer so it now uses only palette swatches and the configured default stroke width
+- omitted the empty masked-slot `+` affordance from rendered exports while keeping the editing affordance in the live editor
+- refreshed the example app theme with a white canvas backdrop
+
 ## 2.4.2
 
 - added custom brush color picking through the system color picker when `configuration.features.allowsColorPicker` is enabled

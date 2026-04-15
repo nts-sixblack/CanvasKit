@@ -1302,7 +1302,6 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         let editor = CanvasSignatureEditorViewController(
             signatureConfiguration: store.configuration.signatures,
             fallbackPalette: store.configuration.colorPalette,
-            allowsColorPicker: store.configuration.features.allowsColorPicker,
             assetLoader: stageView.assetLoader,
             signatureStore: signatureStore,
             onCancel: { [weak self] in

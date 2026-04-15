@@ -380,6 +380,44 @@ final class CanvasKitUIKitTests: XCTestCase {
     }
 
     @MainActor
+    func testMaskedImageRendererOmitsPlusAffordanceForEmptyMaskedSlots() throws {
+        let assetLoader = CanvasAssetLoader()
+        let maskData = try XCTUnwrap(Self.opaqueMaskImage(size: CGSize(width: 120, height: 120)).pngData())
+        let emptyNode = CanvasNode(
+            kind: .maskedImage,
+            name: "Empty Masked",
+            transform: CanvasTransform(position: CanvasPoint(x: 60, y: 60)),
+            size: CanvasSize(width: 120, height: 120),
+            zIndex: 0,
+            maskedImage: CanvasMaskedImagePayload(
+                maskSource: .inlineImage(data: maskData, mimeType: "image/png")
+            )
+        )
+        let project = CanvasProject(
+            templateID: "masked-export-empty",
+            canvasSize: CanvasSize(width: 120, height: 120),
+            background: .solid(CanvasColor(red: 0, green: 0, blue: 0, alpha: 0)),
+            nodes: [emptyNode]
+        )
+
+        let rendererImage = CanvasEditorRenderer.renderBaseImage(project: project, assetLoader: assetLoader)
+
+        let editingView = CanvasNodeView(frame: CGRect(origin: .zero, size: emptyNode.size.cgSize))
+        editingView.apply(node: emptyNode, assetLoader: assetLoader)
+        editingView.layoutIfNeeded()
+        let editingImage = Self.snapshotImage(for: editingView)
+
+        let exportView = CanvasNodeView(frame: CGRect(origin: .zero, size: emptyNode.size.cgSize))
+        exportView.showsMaskedEmptyAffordance = false
+        exportView.apply(node: emptyNode, assetLoader: assetLoader)
+        exportView.layoutIfNeeded()
+        let exportViewImage = Self.snapshotImage(for: exportView)
+
+        XCTAssertNotEqual(rendererImage.pngData(), editingImage.pngData())
+        XCTAssertEqual(rendererImage.pngData(), exportViewImage.pngData())
+    }
+
+    @MainActor
     func testFullscreenEditorKeepsNavigationButtons() {
         let viewController = CanvasEditorViewController(
             input: .template(Self.exportTemplate),
@@ -760,6 +798,12 @@ final class CanvasKitUIKitTests: XCTestCase {
             b: data[index + 2],
             a: data[index + 3]
         )
+    }
+
+    private static func snapshotImage(for view: UIView) -> UIImage {
+        UIGraphicsImageRenderer(size: view.bounds.size).image { context in
+            view.layer.render(in: context.cgContext)
+        }
     }
 
     private static func findSubview(in view: UIView, accessibilityIdentifier: String) -> UIView? {

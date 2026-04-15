@@ -153,6 +153,7 @@ enum CanvasEditorRenderer {
         let renderer = UIGraphicsImageRenderer(size: rect.size, format: format)
         let image = renderer.image { rendererContext in
             let nodeView = CanvasNodeView(frame: CGRect(origin: .zero, size: rect.size))
+            nodeView.showsMaskedEmptyAffordance = false
             nodeView.apply(node: node, assetLoader: assetLoader)
             nodeView.setMaskedImageEditingState(false)
             nodeView.layoutIfNeeded()

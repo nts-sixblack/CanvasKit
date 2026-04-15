@@ -43,7 +43,7 @@ enum CanvasKitExampleConfiguration {
         )
 
         configuration.theme = CanvasEditorTheme(
-            canvasBackdropColor: CanvasColor(hex: "F3EEE8"),
+            canvasBackdropColor: CanvasColor(hex: "FFFFFF"),
             sheetSurfaceColor: CanvasColor(hex: "F8F3EE"),
             cardSurfaceColor: .white,
             primaryTextColor: CanvasColor(hex: "1F2933"),

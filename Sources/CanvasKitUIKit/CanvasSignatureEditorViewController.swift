@@ -3,10 +3,9 @@ import UIKit
 import CanvasKitCore
 
 @MainActor
-final class CanvasSignatureEditorViewController: UIViewController, UIColorPickerViewControllerDelegate {
+final class CanvasSignatureEditorViewController: UIViewController {
     private let signatureConfiguration: CanvasSignatureConfiguration
     private let fallbackPalette: [CanvasColor]
-    private let allowsColorPicker: Bool
     private let assetLoader: CanvasAssetLoader
     private let signatureStore: CanvasSignatureStore
     private let onCancel: () -> Void
@@ -22,7 +21,6 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
     private let undoButton = UIButton(type: .system)
     private let redoButton = UIButton(type: .system)
     private let bottomPanelView = UIView()
-    private let lineWidthRow: InspectorSliderRow
     private let colorStripView = CanvasSignatureColorStripView()
     private let cancelButton = UIButton(type: .system)
     private let doneButton = UIButton(type: .system)
@@ -57,7 +55,6 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
     init(
         signatureConfiguration: CanvasSignatureConfiguration,
         fallbackPalette: [CanvasColor],
-        allowsColorPicker: Bool,
         assetLoader: CanvasAssetLoader,
         signatureStore: CanvasSignatureStore,
         onCancel: @escaping () -> Void,
@@ -65,17 +62,12 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
     ) {
         self.signatureConfiguration = signatureConfiguration
         self.fallbackPalette = fallbackPalette
-        self.allowsColorPicker = allowsColorPicker
         self.assetLoader = assetLoader
         self.signatureStore = signatureStore
         self.onCancel = onCancel
         self.onSave = onSave
         selectedColor = signatureConfiguration.defaultColor
         selectedLineWidth = signatureConfiguration.defaultLineWidth
-        lineWidthRow = InspectorSliderRow(
-            title: CanvasEditorUIRuntime.currentConfiguration.strings.brushSizeRowTitle,
-            range: signatureConfiguration.lineWidthRange
-        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -174,7 +166,7 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
         view.addSubview(bottomPanelView)
         view.addSubview(loadingOverlayView)
 
-        [lineWidthRow, colorStripView, cancelButton, doneButton].forEach(bottomPanelView.addSubview)
+        [colorStripView, cancelButton, doneButton].forEach(bottomPanelView.addSubview)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 22),
@@ -203,13 +195,9 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
             bottomPanelView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bottomPanelView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            lineWidthRow.leadingAnchor.constraint(equalTo: bottomPanelView.leadingAnchor, constant: 24),
-            lineWidthRow.trailingAnchor.constraint(equalTo: bottomPanelView.trailingAnchor, constant: -24),
-            lineWidthRow.topAnchor.constraint(equalTo: bottomPanelView.topAnchor, constant: 18),
-
             colorStripView.leadingAnchor.constraint(equalTo: bottomPanelView.leadingAnchor, constant: 24),
             colorStripView.trailingAnchor.constraint(equalTo: bottomPanelView.trailingAnchor, constant: -24),
-            colorStripView.topAnchor.constraint(equalTo: lineWidthRow.bottomAnchor, constant: 18),
+            colorStripView.topAnchor.constraint(equalTo: bottomPanelView.topAnchor, constant: 18),
             colorStripView.heightAnchor.constraint(equalToConstant: 52),
 
             cancelButton.leadingAnchor.constraint(equalTo: bottomPanelView.leadingAnchor, constant: 36),
@@ -238,21 +226,10 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
     }
 
     private func configureInitialState() {
-        lineWidthRow.value = signatureConfiguration.defaultLineWidth
-        lineWidthRow.onChange = { [weak self] value in
-            self?.selectedLineWidth = value
-        }
-
         colorStripView.onSelectColor = { [weak self] color in
             self?.selectedColor = color
         }
-        colorStripView.onRequestPicker = { [weak self] in
-            self?.presentSignatureColorPicker()
-        }
-        colorStripView.configure(
-            palette: resolvedPalette(),
-            showsColorPicker: allowsColorPicker
-        )
+        colorStripView.configure(palette: resolvedPalette())
         colorStripView.applySelection(color: selectedColor)
 
         drawingView.currentStrokeColor = selectedColor
@@ -331,18 +308,6 @@ final class CanvasSignatureEditorViewController: UIViewController, UIColorPicker
             button.configuration = updatedConfiguration
             button.alpha = button.isEnabled ? 1 : 0.45
         }
-    }
-
-    private func presentSignatureColorPicker() {
-        let picker = UIColorPickerViewController()
-        picker.delegate = self
-        picker.supportsAlpha = true
-        picker.selectedColor = selectedColor.uiColor
-        present(picker, animated: true)
-    }
-
-    func colorPickerViewControllerDidSelectColor(_ viewController: UIColorPickerViewController) {
-        selectedColor = CanvasColor(uiColor: viewController.selectedColor)
     }
 
     @objc
@@ -656,16 +621,12 @@ private final class CanvasSignatureDrawingView: UIView {
 
 private final class CanvasSignatureColorStripView: UIView {
     var onSelectColor: ((CanvasColor) -> Void)?
-    var onRequestPicker: (() -> Void)?
 
     private let scrollView = UIScrollView()
     private let stackView = UIStackView()
-    private let pickerButton = InspectorColorChipButton()
     private var paletteButtons: [CanvasColor: InspectorColorChipButton] = [:]
     private var palette: [CanvasColor] = []
-    private var showsColorPicker = true
     private var selectedColor: CanvasColor = .black
-    private var customColor: CanvasColor?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -692,11 +653,6 @@ private final class CanvasSignatureColorStripView: UIView {
             stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
             stackView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
         ])
-
-        pickerButton.configure(kind: .picker)
-        pickerButton.addAction(UIAction { [weak self] _ in
-            self?.onRequestPicker?()
-        }, for: .touchUpInside)
     }
 
     @available(*, unavailable)
@@ -704,18 +660,14 @@ private final class CanvasSignatureColorStripView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(palette: [CanvasColor], showsColorPicker: Bool) {
+    func configure(palette: [CanvasColor]) {
         self.palette = palette
-        self.showsColorPicker = showsColorPicker
         rebuildButtons()
+        applySelection(color: selectedColor)
     }
 
     func applySelection(color: CanvasColor) {
         selectedColor = color
-        customColor = palette.contains(color) ? nil : color
-        pickerButton.isSelected = customColor != nil
-        pickerButton.setDisplayedColor(customColor?.uiColor)
-
         for (paletteColor, button) in paletteButtons {
             button.isSelected = paletteColor == color
         }
@@ -726,10 +678,6 @@ private final class CanvasSignatureColorStripView: UIView {
         stackView.arrangedSubviews.forEach {
             stackView.removeArrangedSubview($0)
             $0.removeFromSuperview()
-        }
-
-        if showsColorPicker {
-            stackView.addArrangedSubview(pickerButton)
         }
 
         palette.forEach { color in

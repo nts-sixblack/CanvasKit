@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `2.4.2`
+Current release: `2.4.3`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 
@@ -229,6 +229,9 @@ controller.exportCurrentCanvas { result in
 }
 ```
 
+Empty masked template slots still show their add-photo affordance while editing,
+but that `+` marker is omitted from rendered exports.
+
 ## Configuration
 
 `CanvasEditorConfiguration` is the single source of truth for editor setup.
@@ -297,7 +300,8 @@ configuration.features.showsEmbeddedLayersButton = false
 `configuration.templates` controls bundled and external template sources.
 `configuration.resources` controls which bundles are used for assets, fonts, and templates.
 `configuration.signatures` controls the shared signature library used by the signature tool. The tool is only shown when `.addSignature` is enabled and a signature store is configured.
-`configuration.features.allowsColorPicker` controls whether the system color picker is available alongside palette swatches for text, brush, and signature color selection.
+`configuration.signatures.defaultLineWidth` sets the stroke width used by the signature composer.
+`configuration.features.allowsColorPicker` controls whether the system color picker is available alongside palette swatches for text and brush color selection. Signature creation uses the configured signature palette only.
 Visible color swatches include a default border so light colors such as white stay legible against the editor chrome.
 In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered. In both embedded and fullscreen presentations, the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the panel auto-dismisses if it was open.
