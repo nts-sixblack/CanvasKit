@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 public enum CanvasSchemaVersion {
-    public static let current = 6
+    public static let current = 7
 }
 
 public struct CanvasSize: Codable, Hashable, Sendable {
@@ -415,6 +415,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
     public var fontFamily: String
     public var weight: CanvasFontWeight
     public var isItalic: Bool
+    public var isJustified: Bool
     public var fontSize: Double
     public var foregroundColor: CanvasColor
     public var alignment: CanvasTextAlignment
@@ -425,10 +426,27 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
     public var backgroundFill: CanvasFillStyle?
     public var opacity: Double
 
+    private enum CodingKeys: String, CodingKey {
+        case fontFamily
+        case weight
+        case isItalic
+        case isJustified
+        case fontSize
+        case foregroundColor
+        case alignment
+        case letterSpacing
+        case lineSpacing
+        case shadow
+        case outline
+        case backgroundFill
+        case opacity
+    }
+
     public init(
         fontFamily: String,
         weight: CanvasFontWeight = .regular,
         isItalic: Bool = false,
+        isJustified: Bool = false,
         fontSize: Double,
         foregroundColor: CanvasColor,
         alignment: CanvasTextAlignment = .center,
@@ -442,6 +460,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
         self.fontFamily = fontFamily
         self.weight = weight
         self.isItalic = isItalic
+        self.isJustified = isJustified
         self.fontSize = fontSize
         self.foregroundColor = foregroundColor
         self.alignment = alignment
@@ -451,6 +470,40 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
         self.outline = outline
         self.backgroundFill = backgroundFill
         self.opacity = opacity
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        fontFamily = try container.decode(String.self, forKey: .fontFamily)
+        weight = try container.decodeIfPresent(CanvasFontWeight.self, forKey: .weight) ?? .regular
+        isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
+        isJustified = try container.decodeIfPresent(Bool.self, forKey: .isJustified) ?? false
+        fontSize = try container.decode(Double.self, forKey: .fontSize)
+        foregroundColor = try container.decode(CanvasColor.self, forKey: .foregroundColor)
+        alignment = try container.decodeIfPresent(CanvasTextAlignment.self, forKey: .alignment) ?? .center
+        letterSpacing = try container.decodeIfPresent(Double.self, forKey: .letterSpacing) ?? 0
+        lineSpacing = try container.decodeIfPresent(Double.self, forKey: .lineSpacing) ?? 0
+        shadow = try container.decodeIfPresent(CanvasShadowStyle.self, forKey: .shadow)
+        outline = try container.decodeIfPresent(CanvasOutlineStyle.self, forKey: .outline)
+        backgroundFill = try container.decodeIfPresent(CanvasFillStyle.self, forKey: .backgroundFill)
+        opacity = try container.decodeIfPresent(Double.self, forKey: .opacity) ?? 1
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(fontFamily, forKey: .fontFamily)
+        try container.encode(weight, forKey: .weight)
+        try container.encode(isItalic, forKey: .isItalic)
+        try container.encode(isJustified, forKey: .isJustified)
+        try container.encode(fontSize, forKey: .fontSize)
+        try container.encode(foregroundColor, forKey: .foregroundColor)
+        try container.encode(alignment, forKey: .alignment)
+        try container.encode(letterSpacing, forKey: .letterSpacing)
+        try container.encode(lineSpacing, forKey: .lineSpacing)
+        try container.encodeIfPresent(shadow, forKey: .shadow)
+        try container.encodeIfPresent(outline, forKey: .outline)
+        try container.encodeIfPresent(backgroundFill, forKey: .backgroundFill)
+        try container.encode(opacity, forKey: .opacity)
     }
 }
 
@@ -554,6 +607,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
     public var maskedImage: CanvasMaskedImagePayload?
     public var shape: CanvasShapePayload?
     public var isEditable: Bool
+    public var isPermanent: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -569,6 +623,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         case maskedImage
         case shape
         case isEditable
+        case isPermanent
     }
 
     public init(
@@ -584,7 +639,8 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         style: CanvasTextStyle? = nil,
         maskedImage: CanvasMaskedImagePayload? = nil,
         shape: CanvasShapePayload? = nil,
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        isPermanent: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -599,6 +655,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         self.maskedImage = maskedImage
         self.shape = shape
         self.isEditable = isEditable
+        self.isPermanent = isPermanent
     }
 
     public init(from decoder: Decoder) throws {
@@ -616,6 +673,7 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         maskedImage = try container.decodeIfPresent(CanvasMaskedImagePayload.self, forKey: .maskedImage)
         shape = try container.decodeIfPresent(CanvasShapePayload.self, forKey: .shape)
         isEditable = try container.decodeIfPresent(Bool.self, forKey: .isEditable) ?? true
+        isPermanent = try container.decodeIfPresent(Bool.self, forKey: .isPermanent) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -633,6 +691,13 @@ public struct CanvasNode: Codable, Hashable, Identifiable, Sendable {
         try container.encodeIfPresent(maskedImage, forKey: .maskedImage)
         try container.encodeIfPresent(shape, forKey: .shape)
         try container.encode(isEditable, forKey: .isEditable)
+        try container.encode(isPermanent, forKey: .isPermanent)
+    }
+}
+
+public extension CanvasNode {
+    var isPermanentText: Bool {
+        kind == .text && isPermanent
     }
 }
 

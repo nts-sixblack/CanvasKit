@@ -407,6 +407,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var fontSectionTitle: String
     public var alignmentSectionTitle: String
     public var styleSectionTitle: String
+    public var behaviorSectionTitle: String
     public var textColorSectionTitle: String
     public var backgroundSectionTitle: String
     public var shadowColorSectionTitle: String
@@ -418,6 +419,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
     public var italicToggleTitle: String
     public var shadowToggleTitle: String
     public var outlineToggleTitle: String
+    public var justifyToggleTitle: String
+    public var permanentToggleTitle: String
     public var brushInspectorTitle: String
     public var brushShapeSectionTitle: String
     public var brushColorSectionTitle: String
@@ -496,6 +499,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         fontSectionTitle: String = "Font",
         alignmentSectionTitle: String = "Alignment",
         styleSectionTitle: String = "Style",
+        behaviorSectionTitle: String = "Behavior",
         textColorSectionTitle: String = "Text Color",
         backgroundSectionTitle: String = "Background",
         shadowColorSectionTitle: String = "Shadow Color",
@@ -507,6 +511,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         italicToggleTitle: String = "Italic",
         shadowToggleTitle: String = "Shadow",
         outlineToggleTitle: String = "Outline",
+        justifyToggleTitle: String = "Justify",
+        permanentToggleTitle: String = "Permanent",
         brushInspectorTitle: String = "Brush",
         brushShapeSectionTitle: String = "Shape",
         brushColorSectionTitle: String = "Color",
@@ -584,6 +590,7 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.fontSectionTitle = fontSectionTitle
         self.alignmentSectionTitle = alignmentSectionTitle
         self.styleSectionTitle = styleSectionTitle
+        self.behaviorSectionTitle = behaviorSectionTitle
         self.textColorSectionTitle = textColorSectionTitle
         self.backgroundSectionTitle = backgroundSectionTitle
         self.shadowColorSectionTitle = shadowColorSectionTitle
@@ -595,6 +602,8 @@ public struct CanvasEditorStrings: Codable, Hashable, Sendable {
         self.italicToggleTitle = italicToggleTitle
         self.shadowToggleTitle = shadowToggleTitle
         self.outlineToggleTitle = outlineToggleTitle
+        self.justifyToggleTitle = justifyToggleTitle
+        self.permanentToggleTitle = permanentToggleTitle
         self.brushInspectorTitle = brushInspectorTitle
         self.brushShapeSectionTitle = brushShapeSectionTitle
         self.brushColorSectionTitle = brushColorSectionTitle

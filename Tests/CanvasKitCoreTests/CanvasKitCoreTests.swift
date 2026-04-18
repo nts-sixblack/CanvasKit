@@ -190,6 +190,7 @@ final class CanvasEditorCoreTests: XCTestCase {
             fontFamily: "Avenir Next",
             weight: .heavy,
             isItalic: true,
+            isJustified: true,
             fontSize: 58,
             foregroundColor: .accent,
             alignment: .trailing,
@@ -205,6 +206,133 @@ final class CanvasEditorCoreTests: XCTestCase {
         let decoded = try JSONDecoder().decode(CanvasTextStyle.self, from: data)
 
         XCTAssertEqual(decoded, style)
+    }
+
+    func testTextAndNodeBehaviorFlagsRoundTripAcrossEncoding() throws {
+        var style = CanvasTextStyle.defaultText
+        style.isJustified = true
+
+        let project = CanvasProject(
+            templateID: "behavior-flags",
+            canvasSize: CanvasSize(width: 1080, height: 1350),
+            background: .solid(.black),
+            nodes: [
+                CanvasNode(
+                    kind: .text,
+                    name: "Permanent Text",
+                    transform: CanvasTransform(position: CanvasPoint(x: 540, y: 675)),
+                    size: CanvasSize(width: 320, height: 180),
+                    zIndex: 0,
+                    text: "Pinned",
+                    style: style,
+                    isPermanent: true
+                )
+            ]
+        )
+
+        let data = try JSONEncoder().encode(project)
+        let decoded = try JSONDecoder().decode(CanvasProject.self, from: data)
+
+        XCTAssertTrue(decoded.nodes[0].isPermanent)
+        XCTAssertTrue(decoded.nodes[0].style?.isJustified ?? false)
+    }
+
+    func testLegacyProjectDecodeDefaultsBehaviorFlagsToFalse() throws {
+        let data = Data(
+            """
+            {
+              "templateID": "legacy",
+              "canvasSize": {
+                "width": 1080,
+                "height": 1350
+              },
+              "background": {
+                "kind": "solidColor",
+                "color": {
+                  "red": 0,
+                  "green": 0,
+                  "blue": 0,
+                  "alpha": 1
+                }
+              },
+              "nodes": [
+                {
+                  "id": "legacy-text",
+                  "kind": "text",
+                  "transform": {
+                    "position": { "x": 540, "y": 675 },
+                    "rotation": 0,
+                    "scale": 1
+                  },
+                  "size": {
+                    "width": 320,
+                    "height": 180
+                  },
+                  "zIndex": 0,
+                  "opacity": 1,
+                  "text": "Legacy",
+                  "style": {
+                    "fontFamily": "Avenir Next",
+                    "fontSize": 42,
+                    "foregroundColor": {
+                      "red": 1,
+                      "green": 1,
+                      "blue": 1,
+                      "alpha": 1
+                    }
+                  }
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let decodedProject = try JSONDecoder().decode(CanvasProject.self, from: data)
+        let decodedNode = try XCTUnwrap(decodedProject.nodes.first)
+
+        XCTAssertFalse(decodedNode.isPermanent)
+        XCTAssertFalse(decodedNode.style?.isJustified ?? true)
+    }
+
+    func testPermanentTextIgnoresTransformMutationsButAllowsEditingDeleteDuplicateAndReorder() {
+        let store = CanvasEditorStore(template: Self.layerTemplate, configuration: .demo)
+        let textNodeID = "node-1"
+        store.selectNode(textNodeID)
+        store.updateSelectedNodePermanent(true)
+
+        let before = store.selectedNode
+        store.moveSelectedNode(by: CanvasPoint(x: 40, y: 30))
+        store.scaleSelectedNode(by: 1.8)
+        store.rotateSelectedNode(by: 0.75)
+        store.transformSelectedNode(scaleMultiplier: 1.3, rotationDelta: 0.25)
+        store.adjustSelectedTextWidth(by: 80)
+        store.updateSelectedTextHeight(260)
+        store.adjustSelectedTextHeight(by: 40, minimumHeight: 44)
+
+        XCTAssertEqual(store.selectedNode?.transform, before?.transform)
+        XCTAssertEqual(store.selectedNode?.size, before?.size)
+
+        store.updateSelectedText("Updated")
+        store.updateSelectedTextStyle {
+            $0.isJustified = true
+            $0.fontSize = 64
+        }
+
+        XCTAssertEqual(store.selectedNode?.text, "Updated")
+        XCTAssertTrue(store.selectedNode?.style?.isJustified ?? false)
+        XCTAssertEqual(store.selectedNode?.style?.fontSize, 64)
+
+        let originalCount = store.project.nodes.count
+        store.duplicateSelectedNode()
+        XCTAssertEqual(store.project.nodes.count, originalCount + 1)
+        XCTAssertTrue(store.selectedNode?.isPermanent ?? false)
+
+        store.deleteSelectedNode()
+        XCTAssertEqual(store.project.nodes.count, originalCount)
+
+        store.selectNode(textNodeID)
+        store.bringSelectedNodeToFront()
+        XCTAssertEqual(store.project.sortedNodes.last?.id, textNodeID)
     }
 
     func testAdjustSelectedTextWidthOnlyChangesWidth() {

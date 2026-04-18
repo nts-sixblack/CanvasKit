@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 2.5.0
+
+- added `CanvasTextStyle.isJustified` and `CanvasNode.isPermanent` to the public schema and editor runtime
+- added a new text inspector Behavior section with `behaviorSectionTitle`, `justifyToggleTitle`, and `permanentToggleTitle`
+- made permanent text keep its current frame while auto-fitting to the largest font size that still fits during canvas display, inline editing, and export rendering
+- blocked frame and transform manipulation for permanent text while preserving text editing, style updates, duplicate, delete, and layer reordering
+- bumped the project/template schema version to `7` while keeping backward compatibility for legacy JSON that omits the new fields
+
 ## 2.4.3
 
 - simplified the signature editor composer so it now uses only palette swatches and the configured default stroke width

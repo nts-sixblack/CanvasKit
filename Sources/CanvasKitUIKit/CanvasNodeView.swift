@@ -123,9 +123,8 @@ final class CanvasNodeView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let insetBounds = bounds.insetBy(dx: 8, dy: 8)
         shapeLayer.frame = bounds
-        textLabel.frame = insetBounds
+        textLabel.frame = CanvasTextNodeLayout.contentRect(in: bounds)
         imageView.frame = bounds
         maskedContentContainerView.frame = bounds
         maskedMaskImageView.frame = maskedContentContainerView.bounds
@@ -222,11 +221,11 @@ final class CanvasNodeView: UIView {
     }
 
     private func applyText(node: CanvasNode) {
-        let style = node.style ?? (node.kind == .emoji ? .defaultEmoji : .defaultText)
-        textLabel.attributedText = style.attributedString(text: node.text ?? "")
-        textLabel.backgroundColor = style.resolvedBackgroundUIColor ?? .clear
-        textLabel.layer.cornerRadius = style.backgroundFill == nil ? 0 : 16
-        textLabel.clipsToBounds = style.backgroundFill != nil
+        let layout = CanvasTextNodeLayout.resolvedLayout(for: node, in: bounds)
+        textLabel.attributedText = layout.style.attributedString(text: node.text ?? "")
+        textLabel.backgroundColor = layout.style.resolvedBackgroundUIColor ?? .clear
+        textLabel.layer.cornerRadius = layout.style.backgroundFill == nil ? 0 : 16
+        textLabel.clipsToBounds = layout.style.backgroundFill != nil
     }
 
     private func applyImage(node: CanvasNode, assetLoader: CanvasAssetLoader) {

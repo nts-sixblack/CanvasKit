@@ -6,7 +6,7 @@ Reusable Swift Package for iOS canvas editing with:
 - `CanvasKitUIKit`: UIKit editor controller and rendering/runtime helpers
 - `CanvasKitSwiftUI`: SwiftUI wrapper around the UIKit editor
 
-Current release: `2.4.3`
+Current release: `2.5.0`
 
 The package is built so host apps can theme and configure editor chrome at runtime:
 
@@ -232,6 +232,11 @@ controller.exportCurrentCanvas { result in
 Empty masked template slots still show their add-photo affordance while editing,
 but that `+` marker is omitted from rendered exports.
 
+Text nodes also support two runtime behavior flags:
+
+- `CanvasTextStyle.isJustified` forces justified paragraph layout while preserving the stored leading/center/trailing alignment for later reuse
+- `CanvasNode.isPermanent` locks the current text frame and transform, then treats `style.fontSize` as the maximum preferred size while runtime layout auto-fits the effective font size for display, inline editing, and export
+
 ## Configuration
 
 `CanvasEditorConfiguration` is the single source of truth for editor setup.
@@ -306,6 +311,9 @@ Visible color swatches include a default border so light colors such as white st
 In `mode: .embedded`, `configuration.features.enabledTools` now also controls whether `undo` and `redo` are rendered. In both embedded and fullscreen presentations, the bottom tool strip is removed entirely when no primary toolbar tools remain after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the panel auto-dismisses if it was open.
 Use `configuration.features.showsEmbeddedLayersButton = false` to always hide the embedded layers button without affecting fullscreen editor chrome.
+Text inspector copy can now customize `behaviorSectionTitle`, `justifyToggleTitle`, and `permanentToggleTitle`.
+Setting `CanvasTextStyle.isJustified = true` uses justified paragraph layout without overwriting `alignment`, so turning justify back off restores the previous leading/center/trailing choice.
+Setting `CanvasNode.isPermanent = true` keeps the node's current frame, hides text resize and transform handles, blocks drag/pinch/rotation manipulation, and auto-fits the effective font size using `configuration.layout.textContentInset` as the shared measurement inset.
 
 ## Included Resources
 

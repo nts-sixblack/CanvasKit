@@ -328,6 +328,10 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             $0.isHidden = true
             overlayControlContainerView.addSubview($0)
         }
+        deleteHandle.accessibilityIdentifier = "canvas-selection-delete-handle"
+        widthHandle.accessibilityIdentifier = "canvas-selection-width-handle"
+        heightHandle.accessibilityIdentifier = "canvas-selection-height-handle"
+        transformHandle.accessibilityIdentifier = "canvas-selection-transform-handle"
 
         deleteHandle.addAction(UIAction { [weak self] _ in
             self?.handleDeleteTapped()
@@ -493,12 +497,21 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             return
         }
 
+        guard !node.isPermanentText else {
+            return
+        }
+
         let style = node.style ?? .defaultText
-        let contentWidth = max(node.size.width - (textContentInset * 2), 40)
-        let requiredHeight = style.requiredTextHeight(
-            text: node.text ?? "",
-            constrainedWidth: contentWidth
-        ) + (textContentInset * 2)
+        let contentRect = CanvasTextNodeLayout.contentRect(
+            in: CGRect(origin: .zero, size: node.size.cgSize),
+            textInset: textContentInset
+        )
+        let requiredHeight = Double(
+            style.requiredTextHeight(
+                text: node.text ?? "",
+                constrainedWidth: contentRect.width
+            ) + (textContentInset * 2)
+        )
 
         guard abs(requiredHeight - node.size.height) > 0.5 else {
             return
@@ -587,8 +600,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
                 if editingNodeID != nil, editingNodeID != node.id {
                     endInlineEditing()
                 }
-                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 store.selectNode(node.id)
+                guard !node.isPermanentText else {
+                    return
+                }
+                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 activePanNodeID = node.id
             }
 
@@ -639,8 +655,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
                 if editingNodeID != nil, editingNodeID != node.id {
                     endInlineEditing()
                 }
-                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 store.selectNode(node.id)
+                guard !node.isPermanentText else {
+                    return
+                }
+                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 activePinchNodeID = node.id
             }
         }
@@ -680,8 +699,11 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
                 if editingNodeID != nil, editingNodeID != node.id {
                     endInlineEditing()
                 }
-                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 store.selectNode(node.id)
+                guard !node.isPermanentText else {
+                    return
+                }
+                delegate?.canvasStageViewDidBeginNodeManipulation(self)
                 activeRotationNodeID = node.id
             }
         }
@@ -822,10 +844,16 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             )
             let heightDelta = projectedDelta.localDeltaY / max(selectedNode.transform.scale, 0.001)
             let style = selectedNode.style ?? .defaultText
-            let minimumHeight = style.requiredTextHeight(
-                text: selectedNode.text ?? "",
-                constrainedWidth: max(selectedNode.size.width - (textContentInset * 2), 40)
-            ) + (textContentInset * 2)
+            let contentRect = CanvasTextNodeLayout.contentRect(
+                in: CGRect(origin: .zero, size: selectedNode.size.cgSize),
+                textInset: textContentInset
+            )
+            let minimumHeight = Double(
+                style.requiredTextHeight(
+                    text: selectedNode.text ?? "",
+                    constrainedWidth: contentRect.width
+                ) + (textContentInset * 2)
+            )
             store.adjustSelectedTextHeight(by: heightDelta, minimumHeight: minimumHeight)
             lastTextHeightTranslation = translation
 
@@ -1266,9 +1294,9 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
         )
 
         deleteHandle.isHidden = !store.canDeleteSelectedContent
-        transformHandle.isHidden = false
-        widthHandle.isHidden = selectedNode.kind != .text
-        heightHandle.isHidden = selectedNode.kind != .text
+        transformHandle.isHidden = selectedNode.isPermanentText
+        widthHandle.isHidden = selectedNode.kind != .text || selectedNode.isPermanentText
+        heightHandle.isHidden = selectedNode.kind != .text || selectedNode.isPermanentText
 
         let handleRotation = CGAffineTransform(
             rotationAngle: CGFloat(selectedNode.transform.rotation) + (maskedSelectionGeometry?.rotation ?? 0)
@@ -1290,33 +1318,37 @@ final class CanvasStageView: UIView, UIGestureRecognizerDelegate, UITextViewDele
             return
         }
 
-        let style = node.style ?? .defaultText
+        let layout = CanvasTextNodeLayout.resolvedLayout(
+            for: node,
+            in: CGRect(origin: .zero, size: node.size.cgSize),
+            textInset: textContentInset
+        )
         let targetSize = CGSize(
-            width: max(node.size.width - (textContentInset * 2), 40),
-            height: max(node.size.height - (textContentInset * 2), 30)
+            width: layout.textRect.width,
+            height: layout.textRect.height
         )
 
         inlineTextView.bounds = CGRect(origin: .zero, size: targetSize)
         inlineTextView.center = node.transform.position.cgPoint
         inlineTextView.transform = CGAffineTransform(rotationAngle: node.transform.rotation)
             .scaledBy(x: node.transform.scale, y: node.transform.scale)
-        inlineTextView.backgroundColor = style.resolvedBackgroundUIColor ?? .clear
-        inlineTextView.layer.cornerRadius = style.backgroundFill == nil ? 0 : 16
-        inlineTextView.tintColor = style.foregroundColor.uiColor
-        inlineTextView.textAlignment = style.alignment.nsTextAlignment
+        inlineTextView.backgroundColor = layout.style.resolvedBackgroundUIColor ?? .clear
+        inlineTextView.layer.cornerRadius = layout.style.backgroundFill == nil ? 0 : 16
+        inlineTextView.tintColor = layout.style.foregroundColor.uiColor
+        inlineTextView.textAlignment = layout.style.resolvedNSTextAlignment
 
         let currentSelection = inlineTextView.selectedRange
         let requiresTextRefresh = forceTextRefresh ||
             inlineTextView.text != (node.text ?? "") ||
-            activeEditingStyle != style
+            activeEditingStyle != layout.style
         if requiresTextRefresh {
             isApplyingInlineEditorState = true
-            inlineTextView.attributedText = style.attributedString(text: node.text ?? "")
-            inlineTextView.typingAttributes = style.textAttributes()
+            inlineTextView.attributedText = layout.style.attributedString(text: node.text ?? "")
+            inlineTextView.typingAttributes = layout.style.textAttributes()
             let clampedLocation = min(currentSelection.location, (inlineTextView.text as NSString).length)
             inlineTextView.selectedRange = NSRange(location: clampedLocation, length: 0)
             isApplyingInlineEditorState = false
-            activeEditingStyle = style
+            activeEditingStyle = layout.style
         }
 
         inlineTextView.isHidden = false

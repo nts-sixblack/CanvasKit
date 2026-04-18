@@ -157,6 +157,145 @@ final class CanvasKitUIKitTests: XCTestCase {
     }
 
     @MainActor
+    func testTextInspectorBehaviorTogglesReflectNodeStateAndDisableAlignmentWhenJustified() throws {
+        let inspectorView = CanvasTextInspectorView()
+        inspectorView.frame = CGRect(x: 0, y: 0, width: 320, height: 560)
+        inspectorView.configure(fontFamilies: ["Avenir Next"], palette: [.white, .black])
+
+        var style = CanvasTextStyle.defaultText
+        style.isJustified = true
+        let node = CanvasNode(
+            kind: .text,
+            name: "Title",
+            transform: CanvasTransform(position: CanvasPoint(x: 160, y: 120)),
+            size: CanvasSize(width: 240, height: 120),
+            zIndex: 0,
+            text: "Justified",
+            style: style,
+            isPermanent: true
+        )
+
+        inspectorView.apply(node: node)
+        inspectorView.layoutIfNeeded()
+
+        let justifyButton = try XCTUnwrap(
+            Self.findSubview(
+                in: inspectorView,
+                accessibilityIdentifier: "canvas-text-inspector-justify-button"
+            ) as? UIButton
+        )
+        let permanentButton = try XCTUnwrap(
+            Self.findSubview(
+                in: inspectorView,
+                accessibilityIdentifier: "canvas-text-inspector-permanent-button"
+            ) as? UIButton
+        )
+        let alignmentControl = try XCTUnwrap(
+            Self.findSubview(
+                in: inspectorView,
+                accessibilityIdentifier: "canvas-text-inspector-alignment-control"
+            ) as? UISegmentedControl
+        )
+
+        XCTAssertTrue(justifyButton.isSelected)
+        XCTAssertTrue(permanentButton.isSelected)
+        XCTAssertFalse(alignmentControl.isEnabled)
+        XCTAssertEqual(alignmentControl.alpha, 0.45, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testSelectionOverlayHidesResizeAndTransformHandlesForPermanentText() throws {
+        let permanentNode = CanvasNode(
+            id: "permanent-text",
+            kind: .text,
+            name: "Permanent Text",
+            transform: CanvasTransform(position: CanvasPoint(x: 180, y: 220)),
+            size: CanvasSize(width: 240, height: 140),
+            zIndex: 0,
+            text: "Pinned",
+            style: .defaultText,
+            isPermanent: true
+        )
+        let store = CanvasEditorStore(
+            project: CanvasProject(
+                templateID: "permanent-overlay",
+                canvasSize: CanvasSize(width: 360, height: 640),
+                background: .solid(.black),
+                nodes: [permanentNode]
+            ),
+            configuration: .default
+        )
+        let stageView = CanvasStageView()
+        stageView.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        stageView.store = store
+        stageView.layoutIfNeeded()
+
+        store.selectNode(permanentNode.id)
+        stageView.layoutIfNeeded()
+
+        let deleteHandle = try XCTUnwrap(
+            Self.findSubview(in: stageView, accessibilityIdentifier: "canvas-selection-delete-handle")
+        )
+        let widthHandle = try XCTUnwrap(
+            Self.findSubview(in: stageView, accessibilityIdentifier: "canvas-selection-width-handle")
+        )
+        let heightHandle = try XCTUnwrap(
+            Self.findSubview(in: stageView, accessibilityIdentifier: "canvas-selection-height-handle")
+        )
+        let transformHandle = try XCTUnwrap(
+            Self.findSubview(in: stageView, accessibilityIdentifier: "canvas-selection-transform-handle")
+        )
+
+        XCTAssertFalse(deleteHandle.isHidden)
+        XCTAssertTrue(widthHandle.isHidden)
+        XCTAssertTrue(heightHandle.isHidden)
+        XCTAssertTrue(transformHandle.isHidden)
+    }
+
+    @MainActor
+    func testPermanentTextAutoFitShrinksLongerContentAndKeepsTextInsideFrame() {
+        var style = CanvasTextStyle.defaultText
+        style.fontSize = 88
+        style.isJustified = true
+
+        let shortNode = CanvasNode(
+            kind: .text,
+            name: "Short",
+            transform: CanvasTransform(position: CanvasPoint(x: 0, y: 0)),
+            size: CanvasSize(width: 260, height: 140),
+            zIndex: 0,
+            text: "Short title",
+            style: style,
+            isPermanent: true
+        )
+        let longNode = CanvasNode(
+            kind: .text,
+            name: "Long",
+            transform: CanvasTransform(position: CanvasPoint(x: 0, y: 0)),
+            size: CanvasSize(width: 260, height: 140),
+            zIndex: 0,
+            text: "A much longer block of text that should force the effective font size to shrink until everything fits inside the fixed frame.",
+            style: style,
+            isPermanent: true
+        )
+        var flexibleNode = shortNode
+        flexibleNode.isPermanent = false
+
+        let availableTextSize = CanvasTextNodeLayout.contentRect(
+            in: CGRect(origin: .zero, size: shortNode.size.cgSize)
+        ).size
+        let shortStyle = CanvasTextNodeLayout.effectiveStyle(for: shortNode)
+        let longStyle = CanvasTextNodeLayout.effectiveStyle(for: longNode)
+        let flexibleStyle = CanvasTextNodeLayout.effectiveStyle(for: flexibleNode)
+
+        XCTAssertGreaterThan(shortStyle.fontSize, longStyle.fontSize)
+        XCTAssertLessThanOrEqual(shortStyle.fontSize, style.fontSize)
+        XCTAssertEqual(flexibleStyle.fontSize, style.fontSize)
+        XCTAssertTrue(CanvasTextNodeLayout.textFits(shortNode.text ?? "", style: shortStyle, in: availableTextSize))
+        XCTAssertTrue(CanvasTextNodeLayout.textFits(longNode.text ?? "", style: longStyle, in: availableTextSize))
+    }
+
+    @MainActor
     func testMaskedImageRendererClipsPixelsOutsideMask() {
         let contentImage = Self.solidImage(color: .red, size: CGSize(width: 120, height: 120))
         let maskImage = Self.leftHalfMaskImage(size: CGSize(width: 120, height: 120))

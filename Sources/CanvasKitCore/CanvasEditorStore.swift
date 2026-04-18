@@ -290,6 +290,18 @@ public final class CanvasEditorStore {
         }
     }
 
+    public func updateSelectedNodePermanent(_ isPermanent: Bool) {
+        updateSelectedNodeIfChanged { node in
+            guard node.kind == .text,
+                  node.isPermanent != isPermanent else {
+                return false
+            }
+
+            node.isPermanent = isPermanent
+            return true
+        }
+    }
+
     public func updateSelectedSource(_ source: CanvasAssetSource) {
         updateSelectedNode { node in
             node.source = source
@@ -352,28 +364,44 @@ public final class CanvasEditorStore {
     }
 
     public func moveSelectedNode(by delta: CanvasPoint) {
-        updateSelectedNode { node in
+        updateSelectedNodeIfChanged { node in
+            guard !node.isPermanentText else {
+                return false
+            }
             node.transform.position.x += delta.x
             node.transform.position.y += delta.y
+            return true
         }
     }
 
     public func scaleSelectedNode(by multiplier: Double) {
-        updateSelectedNode { node in
+        updateSelectedNodeIfChanged { node in
+            guard !node.isPermanentText else {
+                return false
+            }
             node.transform.scale = max(0.2, min(6.0, node.transform.scale * multiplier))
+            return true
         }
     }
 
     public func rotateSelectedNode(by radians: Double) {
-        updateSelectedNode { node in
+        updateSelectedNodeIfChanged { node in
+            guard !node.isPermanentText else {
+                return false
+            }
             node.transform.rotation += radians
+            return true
         }
     }
 
     public func transformSelectedNode(scaleMultiplier: Double, rotationDelta: Double) {
-        updateSelectedNode { node in
+        updateSelectedNodeIfChanged { node in
+            guard !node.isPermanentText else {
+                return false
+            }
             node.transform.scale = max(0.2, min(6.0, node.transform.scale * scaleMultiplier))
             node.transform.rotation += rotationDelta
+            return true
         }
     }
 
@@ -410,9 +438,10 @@ public final class CanvasEditorStore {
     }
 
     public func adjustSelectedTextWidth(by widthDelta: Double) {
-        updateSelectedNode { node in
-            guard node.kind == .text else {
-                return
+        updateSelectedNodeIfChanged { node in
+            guard node.kind == .text,
+                  !node.isPermanentText else {
+                return false
             }
 
             let minimumWidth = 120.0
@@ -420,7 +449,7 @@ public final class CanvasEditorStore {
             let newWidth = min(max(node.size.width + widthDelta, minimumWidth), maximumWidth)
             let appliedDelta = newWidth - node.size.width
             guard appliedDelta != 0 else {
-                return
+                return false
             }
 
             node.size.width = newWidth
@@ -428,22 +457,30 @@ public final class CanvasEditorStore {
             let positionShift = (appliedDelta * node.transform.scale) / 2.0
             node.transform.position.x += cos(node.transform.rotation) * positionShift
             node.transform.position.y += sin(node.transform.rotation) * positionShift
+            return true
         }
     }
 
     public func updateSelectedTextHeight(_ height: Double) {
-        updateSelectedNode { node in
-            guard node.kind == .text else {
-                return
+        updateSelectedNodeIfChanged { node in
+            guard node.kind == .text,
+                  !node.isPermanentText else {
+                return false
             }
-            node.size.height = max(44, height)
+            let newHeight = max(44, height)
+            guard abs(node.size.height - newHeight) > 0.5 else {
+                return false
+            }
+            node.size.height = newHeight
+            return true
         }
     }
 
     public func adjustSelectedTextHeight(by heightDelta: Double, minimumHeight: Double) {
-        updateSelectedNode { node in
-            guard node.kind == .text else {
-                return
+        updateSelectedNodeIfChanged { node in
+            guard node.kind == .text,
+                  !node.isPermanentText else {
+                return false
             }
 
             let minimum = max(44.0, minimumHeight)
@@ -451,7 +488,7 @@ public final class CanvasEditorStore {
             let newHeight = min(max(node.size.height + heightDelta, minimum), maximum)
             let appliedDelta = newHeight - node.size.height
             guard appliedDelta != 0 else {
-                return
+                return false
             }
 
             node.size.height = newHeight
@@ -459,6 +496,7 @@ public final class CanvasEditorStore {
             let positionShift = (appliedDelta * node.transform.scale) / 2.0
             node.transform.position.x += -sin(node.transform.rotation) * positionShift
             node.transform.position.y += cos(node.transform.rotation) * positionShift
+            return true
         }
     }
 
@@ -595,7 +633,7 @@ public final class CanvasEditorStore {
         }
     }
 
-    private func updateSelectedNode(_ mutation: (inout CanvasNode) -> Void) {
+    private func updateSelectedNodeIfChanged(_ mutation: (inout CanvasNode) -> Bool) {
         guard let selectedNodeID else {
             return
         }
@@ -605,7 +643,13 @@ public final class CanvasEditorStore {
                   project.nodes[index].isEditable else {
                 return false
             }
-            mutation(&project.nodes[index])
+            return mutation(&project.nodes[index])
+        }
+    }
+
+    private func updateSelectedNode(_ mutation: (inout CanvasNode) -> Void) {
+        updateSelectedNodeIfChanged { node in
+            mutation(&node)
             return true
         }
     }

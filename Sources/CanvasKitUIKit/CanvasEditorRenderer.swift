@@ -67,6 +67,7 @@ enum CanvasEditorRenderer {
         image.draw(in: CanvasAspectRatioLayout.aspectFillRect(for: image.size, in: rect))
     }
 
+    @MainActor
     private static func draw(node: CanvasNode, assetLoader: CanvasAssetLoader, in context: CGContext) {
         let nodeRect = CGRect(
             x: -node.size.width / 2,
@@ -95,18 +96,18 @@ enum CanvasEditorRenderer {
         context.restoreGState()
     }
 
+    @MainActor
     private static func drawTextNode(_ node: CanvasNode, in rect: CGRect) {
-        let style = node.style ?? (node.kind == .emoji ? .defaultEmoji : .defaultText)
-        let textRect = rect.insetBy(dx: 8, dy: 8)
+        let layout = CanvasTextNodeLayout.resolvedLayout(for: node, in: rect)
 
-        if let backgroundColor = style.resolvedBackgroundUIColor {
+        if let backgroundColor = layout.style.resolvedBackgroundUIColor {
             backgroundColor.setFill()
-            UIBezierPath(roundedRect: textRect, cornerRadius: 16).fill()
+            UIBezierPath(roundedRect: layout.textRect, cornerRadius: 16).fill()
         }
 
         let text = node.text ?? ""
-        style.attributedString(text: text).draw(
-            with: textRect,
+        layout.style.attributedString(text: text).draw(
+            with: layout.textRect,
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             context: nil
         )

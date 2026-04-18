@@ -1,6 +1,6 @@
 {
   "name": "CanvasKit",
-  "version": "2.4.3",
+  "version": "2.5.0",
   "defaultLocalization": "en",
   "swiftToolsVersion": "6.0",
   "platforms": {

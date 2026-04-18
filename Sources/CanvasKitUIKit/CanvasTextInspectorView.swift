@@ -20,6 +20,8 @@ protocol CanvasTextInspectorViewDelegate: AnyObject {
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetItalic isItalic: Bool)
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetShadow isEnabled: Bool)
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetOutline isEnabled: Bool)
+    func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetJustified isJustified: Bool)
+    func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetPermanent isPermanent: Bool)
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didChangeFontSize value: Double)
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didChangeLetterSpacing value: Double)
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didChangeLineSpacing value: Double)
@@ -43,6 +45,8 @@ final class CanvasTextInspectorView: UIView {
     private let italicButton = UIButton(type: .system)
     private let shadowButton = UIButton(type: .system)
     private let outlineButton = UIButton(type: .system)
+    private let justifyButton = UIButton(type: .system)
+    private let permanentButton = UIButton(type: .system)
     private let textColorStripView = InspectorColorStripView(target: .foreground, showsClearChip: false)
     private let backgroundColorStripView = InspectorColorStripView(target: .background, showsClearChip: true)
     private let shadowColorStripView = InspectorColorStripView(target: .shadow, showsClearChip: false)
@@ -77,6 +81,10 @@ final class CanvasTextInspectorView: UIView {
         title: CanvasEditorUIRuntime.currentConfiguration.strings.styleSectionTitle,
         view: toggleStack
     )
+    private lazy var behaviorSectionView = section(
+        title: CanvasEditorUIRuntime.currentConfiguration.strings.behaviorSectionTitle,
+        view: behaviorToggleStack
+    )
     private lazy var textColorSectionView = section(
         title: CanvasEditorUIRuntime.currentConfiguration.strings.textColorSectionTitle,
         view: textColorStripView
@@ -95,6 +103,13 @@ final class CanvasTextInspectorView: UIView {
     )
     private lazy var toggleStack: UIStackView = {
         let stack = UIStackView(arrangedSubviews: [italicButton, shadowButton, outlineButton])
+        stack.axis = .horizontal
+        stack.spacing = 10
+        stack.distribution = .fillEqually
+        return stack
+    }()
+    private lazy var behaviorToggleStack: UIStackView = {
+        let stack = UIStackView(arrangedSubviews: [justifyButton, permanentButton])
         stack.axis = .horizontal
         stack.spacing = 10
         stack.distribution = .fillEqually
@@ -161,6 +176,7 @@ final class CanvasTextInspectorView: UIView {
         contentStack.addArrangedSubview(fontSectionView)
 
         alignmentControl.selectedSegmentIndex = 1
+        alignmentControl.accessibilityIdentifier = "canvas-text-inspector-alignment-control"
         alignmentControl.selectedSegmentTintColor = CanvasEditorTheme.accent
         alignmentControl.backgroundColor = CanvasEditorTheme.canvasBackdrop
         alignmentControl.setTitleTextAttributes([.foregroundColor: CanvasEditorTheme.secondaryText], for: .normal)
@@ -183,6 +199,19 @@ final class CanvasTextInspectorView: UIView {
             self.delegate?.textInspectorView(self, didSetOutline: self.outlineButton.isSelected)
         }
         contentStack.addArrangedSubview(styleSectionView)
+
+        justifyButton.accessibilityIdentifier = "canvas-text-inspector-justify-button"
+        permanentButton.accessibilityIdentifier = "canvas-text-inspector-permanent-button"
+        configureToggleButton(justifyButton, title: CanvasEditorUIRuntime.currentConfiguration.strings.justifyToggleTitle) { [weak self] in
+            guard let self else { return }
+            self.updateAlignmentControlAvailability()
+            self.delegate?.textInspectorView(self, didSetJustified: self.justifyButton.isSelected)
+        }
+        configureToggleButton(permanentButton, title: CanvasEditorUIRuntime.currentConfiguration.strings.permanentToggleTitle) { [weak self] in
+            guard let self else { return }
+            self.delegate?.textInspectorView(self, didSetPermanent: self.permanentButton.isSelected)
+        }
+        contentStack.addArrangedSubview(behaviorSectionView)
 
         textColorStripView.onSelectColor = { [weak self] color in
             guard let self, !self.isApplyingState else { return }
@@ -288,8 +317,10 @@ final class CanvasTextInspectorView: UIView {
         italicButton.isSelected = style.isItalic
         shadowButton.isSelected = style.shadow != nil
         outlineButton.isSelected = style.outline != nil
+        justifyButton.isSelected = style.isJustified
+        permanentButton.isSelected = node.isPermanent
 
-        [italicButton, shadowButton, outlineButton].forEach(updateToggleButtonAppearance)
+        [italicButton, shadowButton, outlineButton, justifyButton, permanentButton].forEach(updateToggleButtonAppearance)
 
         fontSizeRow.value = style.fontSize
         letterSpacingRow.value = style.letterSpacing
@@ -305,6 +336,8 @@ final class CanvasTextInspectorView: UIView {
         let isEmoji = node.kind == .emoji
         fontSectionView.isHidden = isEmoji
         alignmentSectionView.isHidden = isEmoji
+        behaviorSectionView.isHidden = isEmoji
+        updateAlignmentControlAvailability()
         invalidateContentLayout()
     }
 
@@ -373,6 +406,12 @@ final class CanvasTextInspectorView: UIView {
         button.configuration?.background.strokeColor = button.isSelected
             ? CanvasEditorTheme.accent.withAlphaComponent(0.28)
             : CanvasEditorTheme.separator
+    }
+
+    private func updateAlignmentControlAvailability() {
+        let isEnabled = !justifyButton.isSelected
+        alignmentControl.isEnabled = isEnabled
+        alignmentControl.alpha = isEnabled ? 1 : 0.45
     }
 
     private func didChangeAlignment() {

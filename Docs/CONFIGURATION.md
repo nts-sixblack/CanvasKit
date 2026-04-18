@@ -21,9 +21,11 @@
   - SF Symbol names used by toolbar, inspectors, layer panel, and handles
 - `strings`
   - all primary user-facing copy inside the editor chrome
+  - includes text behavior labels such as `behaviorSectionTitle`, `justifyToggleTitle`, and `permanentToggleTitle`
 - `layout`
   - key layout metrics for toolbar, inspector, overlay, and panel spacing
   - `overlayHandleSize` is the base on-screen size for selection handles; runtime scales it to the displayed canvas with built-in min/max clamps
+  - `textContentInset` is the shared inset used by live text rendering, inline text editing, export rendering, and permanent-text auto-fit measurement
 - `resources`
   - bundle resolution for assets, fonts, and template JSON
 - `templates`
@@ -75,6 +77,25 @@ Visible swatches keep a default border so light colors such as white remain dist
 In embedded presentations, `.undo` and `.redo` are now honored from `configuration.features.enabledTools`. In both embedded and fullscreen presentations, the bottom toolbar is automatically hidden when no primary toolbar tools are left after filtering.
 The floating Layers button is only shown when the project has at least 2 nodes; when fewer, the button is hidden and the layer panel auto-dismisses if it was open.
 Set `configuration.features.showsEmbeddedLayersButton = false` to hide the embedded layers button while leaving fullscreen chrome unchanged.
+
+## Text behavior options
+
+Text nodes support two behavior flags in addition to the existing typography fields:
+
+- `CanvasTextStyle.isJustified`
+  - uses justified paragraph layout in UIKit rendering and inline editing
+  - does not overwrite `alignment`, so the stored leading/center/trailing value is preserved and becomes active again when justify is disabled
+- `CanvasNode.isPermanent`
+  - locks the current text frame and transform in the editor UI
+  - hides width, height, and transform handles for text selections
+  - blocks drag, pinch, rotation, and text frame resize mutations while still allowing text edits, style edits, duplicate, delete, and layer reordering
+  - treats `style.fontSize` as the maximum preferred font size and auto-fits the effective rendered size so all content stays inside the fixed frame
+
+These text inspector strings are now configurable:
+
+- `CanvasEditorStrings.behaviorSectionTitle`
+- `CanvasEditorStrings.justifyToggleTitle`
+- `CanvasEditorStrings.permanentToggleTitle`
 
 ## Legacy aliases
 

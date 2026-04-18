@@ -1618,6 +1618,15 @@ public final class CanvasEditorViewController: UIViewController, CanvasTextInspe
         }
     }
 
+    func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetJustified isJustified: Bool) {
+        applyTextStyleMutation { $0.isJustified = isJustified }
+    }
+
+    func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didSetPermanent isPermanent: Bool) {
+        store.updateSelectedNodePermanent(isPermanent)
+        stageView.ensureSelectedTextFitsHeight()
+    }
+
     func textInspectorView(_ textInspectorView: CanvasTextInspectorView, didChangeFontSize value: Double) {
         applyTextStyleMutation { $0.fontSize = value }
     }
