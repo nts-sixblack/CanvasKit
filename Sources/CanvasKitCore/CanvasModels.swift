@@ -413,6 +413,7 @@ public struct CanvasFillStyle: Codable, Hashable, Sendable {
 
 public struct CanvasTextStyle: Codable, Hashable, Sendable {
     public var fontFamily: String
+    public var fontPath: String?
     public var weight: CanvasFontWeight
     public var isItalic: Bool
     public var isJustified: Bool
@@ -428,6 +429,8 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case fontFamily
+        case fontPath
+        case path
         case weight
         case isItalic
         case isJustified
@@ -444,6 +447,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
 
     public init(
         fontFamily: String,
+        path: String? = nil,
         weight: CanvasFontWeight = .regular,
         isItalic: Bool = false,
         isJustified: Bool = false,
@@ -458,6 +462,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
         opacity: Double = 1.0
     ) {
         self.fontFamily = fontFamily
+        self.fontPath = path
         self.weight = weight
         self.isItalic = isItalic
         self.isJustified = isJustified
@@ -475,6 +480,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         fontFamily = try container.decode(String.self, forKey: .fontFamily)
+        fontPath = try container.decodeIfPresent(String.self, forKey: .fontPath) ?? container.decodeIfPresent(String.self, forKey: .path)
         weight = try container.decodeIfPresent(CanvasFontWeight.self, forKey: .weight) ?? .regular
         isItalic = try container.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
         isJustified = try container.decodeIfPresent(Bool.self, forKey: .isJustified) ?? false
@@ -492,6 +498,7 @@ public struct CanvasTextStyle: Codable, Hashable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(fontFamily, forKey: .fontFamily)
+        try container.encodeIfPresent(fontPath, forKey: .path)
         try container.encode(weight, forKey: .weight)
         try container.encode(isItalic, forKey: .isItalic)
         try container.encode(isJustified, forKey: .isJustified)

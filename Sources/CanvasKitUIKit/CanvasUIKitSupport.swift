@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import CoreText
 import UIKit
 import CanvasKitCore
 
@@ -297,7 +298,9 @@ extension CanvasTextStyle {
         let familyFonts = UIFont.fontNames(forFamilyName: fontFamily)
         let font: UIFont
 
-        if let matchedFontName = bestMatchingFontName(in: familyFonts) ?? UIFont(name: fontFamily, size: pointSize)?.fontName,
+        if let pathFont = fontPath.flatMap({ fontFromPath($0, pointSize: pointSize) }) {
+            font = pathFont
+        } else if let matchedFontName = bestMatchingFontName(in: familyFonts) ?? UIFont(name: fontFamily, size: pointSize)?.fontName,
            let resolvedFont = UIFont(name: matchedFontName, size: pointSize) {
             font = resolvedFont
         } else {
@@ -312,6 +315,18 @@ extension CanvasTextStyle {
             return UIFont(descriptor: descriptor, size: pointSize)
         }
         return font
+    }
+
+    private func fontFromPath(_ path: String, pointSize: CGFloat) -> UIFont? {
+        let url = URL(fileURLWithPath: path)
+        guard let provider = CGDataProvider(url: url as CFURL),
+              let cgFont = CGFont(provider),
+              let postScriptName = cgFont.postScriptName as String? else {
+            return nil
+        }
+
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        return UIFont(name: postScriptName, size: pointSize)
     }
 
     func attributedString(text: String) -> NSAttributedString {

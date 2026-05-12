@@ -8,6 +8,7 @@
 import CanvasKitCore
 import CanvasKitUIKit
 import CanvasKitSwiftUI
+import Foundation
 import PhotosUI
 import SwiftUI
 
@@ -20,6 +21,10 @@ struct ContentView: View {
     @State private var backgroundSelectionID = UUID()
     @State private var isImportingBackground = false
     @State private var backgroundImportError: String?
+    @State private var isShowingTemplateImporter = false
+    @State private var projectFolderTemplates: [StoredProjectFolderTemplate] = []
+    @State private var isImportingTemplate = false
+    @State private var templateImportError: String?
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -42,6 +47,39 @@ struct ContentView: View {
                     }
                 } footer: {
                     Text("The selected photo is passed to the editor as the canvas background, so it cannot be selected, moved, or resized.")
+                }
+
+                Section {
+                    if projectFolderTemplates.isEmpty {
+                        Text("No project folders found in Application Support/CanvasKitExample/Template.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(projectFolderTemplates) { template in
+                            Button {
+                                importProjectFolder(at: template.url)
+                            } label: {
+                                Label(template.name, systemImage: "folder")
+                            }
+                            .disabled(isImportingTemplate)
+                        }
+                    }
+
+                    Button {
+                        isShowingTemplateImporter = true
+                    } label: {
+                        Label("Pick JSON Template", systemImage: "doc.badge.plus")
+                    }
+                    .disabled(isImportingTemplate)
+
+                    if isImportingTemplate {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("Importing…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Open project export folders stored in Application Support/CanvasKitExample/Template, or import a template JSON file.")
                 }
 
                 Section("Fullscreen Templates") {
@@ -123,6 +161,9 @@ struct ContentView: View {
                     }
                 }
             }
+            .onAppear {
+                loadProjectFolderTemplates()
+            }
             .navigationTitle("CanvasKit Example")
             .navigationDestination(for: EditorDemoRoute.self) { route in
                 switch route.presentation {
@@ -141,6 +182,13 @@ struct ContentView: View {
             .task(id: backgroundSelectionID) {
                 await importSelectedBackgroundIfNeeded()
             }
+            .fileImporter(
+                isPresented: $isShowingTemplateImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                importTemplate(from: result)
+            }
             .alert(
                 "Couldn’t Use Photo",
                 isPresented: isShowingBackgroundImportError
@@ -148,6 +196,14 @@ struct ContentView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(backgroundImportError ?? "")
+            }
+            .alert(
+                "Couldn’t Import Template",
+                isPresented: isShowingTemplateImportError
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(templateImportError ?? "")
             }
         }
     }
@@ -170,6 +226,17 @@ struct ContentView: View {
             set: { isPresented in
                 if !isPresented {
                     backgroundImportError = nil
+                }
+            }
+        )
+    }
+
+    private var isShowingTemplateImportError: Binding<Bool> {
+        Binding(
+            get: { templateImportError != nil },
+            set: { isPresented in
+                if !isPresented {
+                    templateImportError = nil
                 }
             }
         )
@@ -212,6 +279,255 @@ struct ContentView: View {
             )
         } catch {
             backgroundImportError = error.localizedDescription
+        }
+    }
+
+    private func loadProjectFolderTemplates() {
+        do {
+            let templateDirectory = CanvasKitExampleStore.templateDirectory()
+            try FileManager.default.createDirectory(
+                at: templateDirectory,
+                withIntermediateDirectories: true
+            )
+
+            let urls = try FileManager.default.contentsOfDirectory(
+                at: templateDirectory,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            projectFolderTemplates = try urls.compactMap { url in
+                let values = try url.resourceValues(forKeys: [.isDirectoryKey])
+                guard values.isDirectory == true else {
+                    return nil
+                }
+
+                return StoredProjectFolderTemplate(url: url)
+            }
+            .sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        } catch {
+            projectFolderTemplates = []
+            templateImportError = error.localizedDescription
+        }
+    }
+
+    private func importProjectFolder(at folderURL: URL) {
+        guard !isImportingTemplate else {
+            return
+        }
+
+        isImportingTemplate = true
+        defer {
+            isImportingTemplate = false
+        }
+
+        do {
+            let projectURL = folderURL.appendingPathComponent("project.json")
+            guard FileManager.default.fileExists(atPath: projectURL.path) else {
+                throw CanvasProjectFolderImportError.missingProjectJSON
+            }
+
+            let data = try Data(contentsOf: projectURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            var project = try decoder.decode(CanvasProject.self, from: data)
+            let assets = try loadThemeAssets(from: folderURL)
+            try inlineBundleImages(in: &project, assets: assets)
+            resolveFontPaths(in: &project, baseURL: folderURL)
+            navigationPath.append(
+                EditorDemoRoute(
+                    input: .project(project),
+                    presentation: .fullscreen
+                )
+            )
+        } catch {
+            templateImportError = error.localizedDescription
+        }
+    }
+
+    private func loadThemeAssets(from folderURL: URL) throws -> [String: InlineThemeAsset] {
+        let assetsURL = folderURL.appendingPathComponent("CanvasThemeAssets", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: assetsURL.path) else {
+            throw CanvasProjectFolderImportError.missingAssetFolder
+        }
+
+        let resourceKeys: Set<URLResourceKey> = [.isDirectoryKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: assetsURL,
+            includingPropertiesForKeys: Array(resourceKeys),
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw CanvasProjectFolderImportError.missingAssetFolder
+        }
+
+        var assets: [String: InlineThemeAsset] = [:]
+        for case let imageURL as URL in enumerator {
+            let values = try imageURL.resourceValues(forKeys: resourceKeys)
+            guard values.isDirectory != true,
+                  let mimeType = mimeType(for: imageURL) else {
+                continue
+            }
+
+            let imageName = imageURL.deletingPathExtension().lastPathComponent
+            let imageData = try Data(contentsOf: imageURL)
+            assets[imageName] = InlineThemeAsset(
+                data: imageData,
+                mimeType: mimeType
+            )
+        }
+
+        return assets
+    }
+
+    private func inlineBundleImages(in project: inout CanvasProject, assets: [String: InlineThemeAsset]) throws {
+        try inlineBundleImage(&project.background.source, assets: assets)
+
+        for index in project.nodes.indices {
+            try inlineBundleImage(&project.nodes[index].source, assets: assets)
+            if var maskedImage = project.nodes[index].maskedImage {
+                try inlineBundleImage(&maskedImage.maskSource, assets: assets)
+                try inlineBundleImage(&maskedImage.overlaySource, assets: assets)
+                project.nodes[index].maskedImage = maskedImage
+            }
+        }
+    }
+
+    private func resolveFontPaths(in project: inout CanvasProject, baseURL: URL) {
+        for index in project.nodes.indices {
+            guard var style = project.nodes[index].style,
+                  let fontPath = style.fontPath,
+                  URL(fileURLWithPath: fontPath).isFileURL,
+                  !fontPath.hasPrefix("/") else {
+                continue
+            }
+
+            style.fontPath = baseURL.appendingPathComponent(fontPath).path
+            project.nodes[index].style = style
+        }
+    }
+
+    private func inlineBundleImage(_ source: inout CanvasAssetSource?, assets: [String: InlineThemeAsset]) throws {
+        guard let currentSource = source else {
+            return
+        }
+
+        var mutableSource = currentSource
+        try inlineBundleImage(&mutableSource, assets: assets)
+        source = mutableSource
+    }
+
+    private func inlineBundleImage(_ source: inout CanvasAssetSource, assets: [String: InlineThemeAsset]) throws {
+        guard source.kind == .bundleImage,
+              let name = source.name else {
+            return
+        }
+
+        guard let asset = assets[name] else {
+            throw CanvasProjectFolderImportError.missingAsset(name)
+        }
+
+        source = .inlineImage(data: asset.data, mimeType: asset.mimeType)
+    }
+
+    private func mimeType(for url: URL) -> String? {
+        switch url.pathExtension.lowercased() {
+        case "png":
+            return "image/png"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "webp":
+            return "image/webp"
+        default:
+            return nil
+        }
+    }
+    private func importTemplate(from result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else {
+                return
+            }
+            importTemplate(at: url)
+        case .failure(let error):
+            if isUserCancellation(error) {
+                return
+            }
+            templateImportError = error.localizedDescription
+        }
+    }
+
+    private func importTemplate(at url: URL) {
+        guard !isImportingTemplate else {
+            return
+        }
+
+        isImportingTemplate = true
+        defer {
+            isImportingTemplate = false
+        }
+
+        let isSecurityScoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if isSecurityScoped {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            if (try? JSONDecoder().decode(CanvasProject.self, from: data)) != nil {
+                templateImportError = "The selected JSON file is a CanvasKit project export. Select the project folder from Application Support/CanvasKitExample/Template instead."
+                return
+            }
+            let template = try JSONDecoder().decode(CanvasTemplate.self, from: data)
+            store.addImportedTemplate(template)
+            navigationPath.append(
+                EditorDemoRoute(
+                    input: .template(template),
+                    presentation: .fullscreen
+                )
+            )
+        } catch is DecodingError {
+            templateImportError = "The selected JSON file is not a valid CanvasKit template."
+        } catch {
+            templateImportError = error.localizedDescription
+        }
+    }
+
+    private func isUserCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NSCocoaErrorDomain
+            && nsError.code == CocoaError.Code.userCancelled.rawValue
+    }
+}
+
+private struct StoredProjectFolderTemplate: Identifiable {
+    let url: URL
+
+    var id: URL { url }
+    var name: String { url.lastPathComponent }
+}
+
+private struct InlineThemeAsset {
+    let data: Data
+    let mimeType: String
+}
+
+enum CanvasProjectFolderImportError: LocalizedError {
+    case missingProjectJSON
+    case missingAssetFolder
+    case missingAsset(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingProjectJSON:
+            return "The selected folder must contain project.json at its root."
+        case .missingAssetFolder:
+            return "The selected folder must contain a CanvasThemeAssets image folder."
+        case .missingAsset(let name):
+            return "The selected project folder is missing the referenced asset: \(name)."
         }
     }
 }

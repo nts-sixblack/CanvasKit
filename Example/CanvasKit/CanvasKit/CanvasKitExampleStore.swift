@@ -36,10 +36,20 @@ final class CanvasKitExampleStore: ObservableObject {
         return .project(project)
     }
 
+    func addImportedTemplate(_ template: CanvasTemplate) {
+        templates.removeAll { $0.id == template.id }
+        templates.append(template)
+        templates.sort {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     func save(result: CanvasEditorResult, previewImage: UIImage) {
         let folderURL = Self.storageDirectory()
         let fileManager = FileManager.default
 
+        print("Folder URL: \(folderURL)")
+        
         try? fileManager.createDirectory(
             at: folderURL,
             withIntermediateDirectories: true
@@ -51,7 +61,9 @@ final class CanvasKitExampleStore: ObservableObject {
         try? result.imageData.write(to: imageURL, options: .atomic)
         try? result.projectData.write(to: projectURL, options: .atomic)
 
-        let project = try? JSONDecoder().decode(CanvasProject.self, from: result.projectData)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let project = try? decoder.decode(CanvasProject.self, from: result.projectData)
         savedDocument = SavedCanvasDocument(
             previewImage: previewImage,
             project: project,
@@ -111,7 +123,11 @@ final class CanvasKitExampleStore: ObservableObject {
         }
 
         let project = (try? Data(contentsOf: projectURL))
-            .flatMap { try? JSONDecoder().decode(CanvasProject.self, from: $0) }
+            .flatMap { data -> CanvasProject? in
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                return try? decoder.decode(CanvasProject.self, from: data)
+            }
 
         savedDocument = SavedCanvasDocument(
             previewImage: previewImage,
@@ -253,6 +269,11 @@ final class CanvasKitExampleStore: ObservableObject {
             context.beginPage()
             previewImage.draw(in: bounds)
         }
+    }
+
+    static func templateDirectory() -> URL {
+        storageDirectory()
+            .appendingPathComponent("Template", isDirectory: true)
     }
 
     fileprivate static func storageDirectory() -> URL {
